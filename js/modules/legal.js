@@ -110,7 +110,7 @@ export const datenschutz = {
           Datenschutzhinweise von Anthropic, mit dem du dafür selbst einen Vertrag hast; es handelt sich um eine Übermittlung in ein Drittland. Der Schlüssel
           bleibt im Speicher deines Geräts und ist nicht Teil von Sicherungsdateien. Ohne Schlüssel kannst du Fotos und Auftrag selbst über das Teilen-Menü
           weitergeben; dann überträgt die Anwendung nichts. Teilst du Fotos an die Claude-App, gelten dafür die Bedingungen deines eigenen Claude-Kontos.
-          Links zu Quellen (z. B. BoardGameGeek) öffnen sich nur, wenn du sie antippst.</p>
+          Links zu Quellen (z. B. BoardGameGeek) und zu Erklärvideos bzw. zur Suche auf YouTube (Google Ireland Limited) öffnen sich nur, wenn du sie antippst; vorher wird nichts von YouTube geladen.</p>
           <p><strong>Abgleich mit BoardGameGeek (nur wenn du ihn einschaltest):</strong> Hinterlegst du im Spielekompass einen eigenen App-Schlüssel von BoardGameGeek,
           fragt die Anwendung für jedes Spiel mit Titel direkt von deinem Gerät die Schnittstelle von BoardGameGeek (BoardGameGeek, LLC, USA) ab. Übertragen werden
           der Spieltitel bzw. die Nummer des Spiels bei BoardGameGeek, der Schlüssel und technisch bedingt deine IP-Adresse, aber keine Fotos. Es gelten die

@@ -9,6 +9,8 @@
  *   category: 'kinder' | 'familie' | 'kenner' | 'experte' | '',
  *   mechanics: ['kooperativ', …], competences: ['kommunikation', …], tags: ['freie Begriffe'],
  *   description, pedagogy, notes,
+ *   labels: ['favorit', …],                // eigene Markierungen, siehe LABELS
+ *   videoUrl, videoChannel,                // deutsches Erklärvideo (YouTube), optional
  *   cover: true | false, coverAt,          // Titelbild liegt in IndexedDB (core/image-store.js)
  *   recognition: { status: 'open' | 'done', at, confidence: 'hoch' | 'mittel' | 'niedrig' },
  *   createdAt, updatedAt
@@ -79,16 +81,27 @@ export const COMPETENCES = [
   { id: 'motorik', label: 'Feinmotorik' },
 ];
 
-export const TIME_STEPS = [15, 30, 45, 60, 90, 120];
+export const TIME_STEPS = [15, 30, 45, 60, 90, 120, 180, 240, 360, 480];
+
+/** Eigene Markierungen je Spiel (frei kombinierbar, filterbar). */
+export const LABELS = [
+  { id: 'favorit', label: 'Favorit' },
+  { id: 'bald', label: 'Bald wieder spielen' },
+  { id: 'mitbringen', label: 'Zur nächsten Runde mitbringen' },
+  { id: 'nie-gespielt', label: 'Noch nie gespielt' },
+  { id: 'aussortieren', label: 'Fliegt aus der Sammlung' },
+];
 
 const byId = (list) => new Map(list.map((x) => [x.id, x]));
 const CAT = byId(CATEGORIES);
 const MEC = byId(MECHANICS);
 const COM = byId(COMPETENCES);
+const LAB = byId(LABELS);
 
 export const categoryLabel = (id) => CAT.get(id)?.label || '';
 export const mechanicLabel = (id) => MEC.get(id)?.label || id;
 export const competenceLabel = (id) => COM.get(id)?.label || id;
+export const labelLabel = (id) => LAB.get(id)?.label || id;
 
 // ---------------------------------------------------------------- Anzeige
 const dash = (a, b) => (a && b && a !== b ? `${a}–${b}` : String(a || b || ''));
@@ -98,9 +111,30 @@ export function playersText(g) {
   const r = dash(g.playersMin, g.playersMax);
   return `${r} ${r === '1' ? 'Person' : 'Personen'}`;
 }
-export const durationText = (g) => (g.durationMin || g.durationMax ? `${dash(g.durationMin, g.durationMax)} Min.` : '');
+/** Dauer: bis 90 Minuten in Minuten, darüber in Stunden (z. B. „4–8 Std.“). */
+const hours = (m) => String(Math.round((m / 60) * 2) / 2).replace('.5', '½').replace(/^0½$/, '½');
+export function durationText(g) {
+  const a = g.durationMin || g.durationMax;
+  const b = g.durationMax || g.durationMin;
+  if (!a) return '';
+  if (Math.max(a, b) <= 90) return `${dash(g.durationMin, g.durationMax)} Min.`;
+  const ha = hours(a);
+  const hb = hours(b);
+  if (a < 60) return `${a} Min. – ${hb} Std.`;
+  return `${ha === hb ? ha : `${ha}–${hb}`} Std.`;
+}
 export const ageText = (g) => (g.ageMin ? `ab ${g.ageMin} J.` : '');
-export const timeLabel = (m) => (m >= 120 ? 'bis 2 Std.' : m >= 90 ? 'bis 1½ Std.' : `bis ${m} Min.`);
+export const timeLabel = (m) => (m >= 90 ? `bis ${hours(m)} Std.` : `bis ${m} Min.`);
+
+/** YouTube-Suche nach einem deutschen Erklärvideo – kostenlos, ohne Schlüssel. */
+export const videoSearchUrl = (g) =>
+  `https://www.youtube.com/results?search_query=${encodeURIComponent(`${g.title || ''} Erklärvideo deutsch Regeln`)}`;
+
+/** Nur echte YouTube-Adressen (Video oder Kurzlink) zulassen. */
+export function cleanVideoUrl(u) {
+  const v = String(u || '').trim();
+  return /^https:\/\/(www\.|m\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)[\w-]{6,}[^\s"<>]*$/.test(v) ? v : '';
+}
 
 /** „4–6“ oder „4“ → { min, max } */
 export function parseRange(s) {
@@ -114,20 +148,21 @@ export function parseRange(s) {
 export const isRecognized = (g) => g.recognition?.status === 'done';
 
 // ---------------------------------------------------------------- Filtern
-export const emptyFilter = () => ({ players: null, age: null, time: null, categories: [], mechanics: [], competences: [], query: '' });
+export const emptyFilter = () => ({ players: null, age: null, time: null, categories: [], mechanics: [], competences: [], labels: [], query: '' });
 
 /** Anzahl gesetzter Filter (jede gewählte Kompetenz, Spielart und Mechanik zählt einzeln). */
 export const filterCount = (f) =>
   [f.players, f.age, f.time].filter((v) => v != null).length
-  + f.categories.length + f.mechanics.length + f.competences.length + (f.query.trim() ? 1 : 0);
+  + f.categories.length + f.mechanics.length + f.competences.length + (f.labels || []).length + (f.query.trim() ? 1 : 0);
 
 export const filterActive = (f) =>
-  f.players != null || f.age != null || f.time != null || f.categories.length || f.mechanics.length || f.competences.length || !!f.query.trim();
+  f.players != null || f.age != null || f.time != null || f.categories.length || f.mechanics.length || f.competences.length || (f.labels || []).length || !!f.query.trim();
 
 /**
  * Wendet den Filter an und sortiert nach Passung.
  * - Gruppengröße, Alter, Zeit, Spielart: harte Bedingungen. Fehlende Angaben am Spiel schließen nicht aus.
  * - Mechaniken: Alle gewählten müssen zutreffen.
+ * - Eigene Labels: mindestens eines der gewählten muss gesetzt sein.
  * - Kompetenzen: mindestens eine muss zutreffen; je mehr, desto weiter oben.
  * Liefert [{ game, hits, ideal, tight }].
  */
@@ -142,6 +177,7 @@ export function filterGames(games, f) {
     if (f.age != null && g.ageMin && g.ageMin > f.age) continue;
     if (f.time != null && g.durationMin && g.durationMin > f.time) continue;
     if (f.categories.length && !f.categories.includes(g.category)) continue;
+    if ((f.labels || []).length && !f.labels.some((l) => (g.labels || []).includes(l))) continue;
     const mech = g.mechanics || [];
     if (f.mechanics.some((m) => !mech.includes(m))) continue;
     const hits = f.competences.filter((c) => (g.competences || []).includes(c)).length;
@@ -168,7 +204,9 @@ const VOCAB = () => `- kategorie: genau einer dieser Werte: ${CATEGORIES.map((c)
 - schlagworte: weitere passende Begriffe, die in den Listen fehlen (optional)
 - beschreibung: 2 bis 3 Sätze auf Deutsch: Thema und worum es geht
 - paedagogik: 1 bis 2 Sätze auf Deutsch: wofür es sich in der pädagogischen Arbeit eignet und worauf man achten sollte
-- sicherheit: hoch, mittel oder niedrig (wie sicher du bist, das richtige Spiel erkannt zu haben)`;
+- sicherheit: hoch, mittel oder niedrig (wie sicher du bist, das richtige Spiel erkannt zu haben)
+- erklaervideo: Adresse eines deutschsprachigen Erklärvideos (Regelerklärung) auf YouTube, gern von bekannten deutschen Kanälen wie Hunter & Cron oder Spiel doch mal!. Nur eine Adresse, die du wirklich gefunden hast; sonst weglassen
+- erklaervideo_kanal: Name des Kanals (optional)`;
 
 const ANSWER_ITEM = `{"kennung": "…", "titel": "…", "verlag": "…", "jahr": 2015,
    "spieler_min": 2, "spieler_max": 8, "spieler_ideal": "4-6",
@@ -176,6 +214,7 @@ const ANSWER_ITEM = `{"kennung": "…", "titel": "…", "verlag": "…", "jahr":
    "bgg_id": 178900, "bgg_url": "https://boardgamegeek.com/boardgame/178900",
    "kategorie": "familie", "mechaniken": ["party"], "kompetenzen": ["kommunikation"],
    "schlagworte": [], "beschreibung": "…", "paedagogik": "…", "sicherheit": "hoch",
+   "erklaervideo": "https://www.youtube.com/watch?v=…", "erklaervideo_kanal": "…",
    "quellen": ["https://…"]ZUSCHNITT}`;
 
 /**
@@ -337,6 +376,8 @@ export function parseRecognition(raw, ids, { strict = false } = {}) {
     if (bggId) { patch.bggId = bggId; patch.bggUrl = `https://boardgamegeek.com/boardgame/${bggId}`; }
     const urls = (Array.isArray(it.quellen) ? it.quellen : []).filter((u) => typeof u === 'string' && /^https:\/\/[^\s"<>]+$/.test(u)).slice(0, 8);
     if (urls.length) patch.sources = urls;
+    const video = cleanVideoUrl(it.erklaervideo);
+    if (video) { patch.videoUrl = video; patch.videoChannel = text(it.erklaervideo_kanal, 60) || ''; }
     const z = it.zuschnitt;
     if (z && typeof z === 'object') {
       const box = [z.x, z.y, z.breite, z.hoehe].map(Number);

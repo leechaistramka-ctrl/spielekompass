@@ -43,6 +43,9 @@ Wichtig: Jede Home-Bildschirm-App hat ihren eigenen Speicher. Spiele zwischen Ge
 - **Spielart**: Kinder-, Familien-, Kenner- oder Expertenspiel (mehrere wählbar).
 - **Mechanik**: Alle gewählten müssen zutreffen.
 - Fehlen einem Spiel Angaben, schließt der Filter es nicht aus.
+- **Meine Labels**: eigene Markierungen (Favorit, Bald wieder spielen, Zur nächsten Runde mitbringen, Noch nie gespielt, Fliegt aus der Sammlung). Eines der gewählten reicht.
+- **Verfügbare Zeit** von 15 Minuten bis 8 Stunden.
+- Der Filterbereich lässt sich mit einem Tipp auf die Überschrift ein- und ausklappen; gesetzte Filter wirken weiter.
 - **Alle Filter zurücksetzen** (oben und unten im Filterbereich) setzt alles mit einem Tipp zurück; die Zahl in Klammern zeigt, wie viele Filter gerade gesetzt sind.
 
 ## Datenflüsse
@@ -70,6 +73,7 @@ Wichtig: Jede Home-Bildschirm-App hat ihren eigenen Speicher. Spiele zwischen Ge
    "dauer_min": 15, "dauer_max": 30, "alter_ab": 10, "komplexitaet": 1.8,
    "bgg_id": 178900, "kategorie": "familie", "mechaniken": ["party"], "kompetenzen": ["kommunikation"],
    "schlagworte": [], "beschreibung": "…", "paedagogik": "…", "sicherheit": "hoch",
+   "erklaervideo": "https://www.youtube.com/watch?v=…", "erklaervideo_kanal": "…",
    "quellen": ["https://…"], "zuschnitt": {"x": 0.1, "y": 0.05, "breite": 0.8, "hoehe": 0.9}}
 ]}
 ```

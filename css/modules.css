@@ -646,3 +646,26 @@ body[data-module="ideas"] .fab { display: none; }
 .source-list a { display: inline-flex; align-items: center; gap: 8px; min-height: var(--tap); color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
 .source-list a:hover { color: var(--gold); }
 .source-list .icon { width: 17px; height: 17px; color: var(--gold); flex: none; }
+
+/* Filterbereich ein- und ausklappen */
+.finder-toggle {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0; margin: 0;
+  background: none; border: 0; color: inherit; font: inherit; cursor: pointer; text-align: left;
+}
+.finder-toggle h2 { margin: 0; }
+.finder-toggle .fold-icon { display: inline-flex; color: var(--gold); }
+.finder-toggle .icon { width: 22px; height: 22px; }
+.finder-toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: 6px; }
+.finder.is-folded .panel-head { margin-bottom: 0; }
+.finder-body[hidden] { display: none; }
+
+/* Eigene Labels */
+.badge-label { background: var(--accent-soft); color: var(--text); border: 1px solid var(--border-strong); }
+.badge-label.label-favorit { color: var(--gold); }
+.badge-label.label-aussortieren { background: var(--danger-soft); color: var(--text); }
+.game-labels { padding-top: 14px; padding-bottom: 14px; }
+.game-labels .chip .icon { width: 14px; height: 14px; margin-right: 4px; }
+
+/* Erklärvideo */
+.game-video h2 { display: flex; align-items: center; gap: 8px; }
+.game-video .btn { max-width: 100%; white-space: normal; text-align: left; overflow-wrap: anywhere; height: auto; }
