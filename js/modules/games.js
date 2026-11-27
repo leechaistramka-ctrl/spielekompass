@@ -6,7 +6,7 @@ import { emptyStateHTML, pageHeadHTML, confirmDialog, toast } from '../core/ui.j
 import { href } from '../core/router.js';
 import {
   CATEGORIES, MECHANICS, COMPETENCES, TIME_STEPS, categoryLabel, mechanicLabel, competenceLabel,
-  playersText, durationText, ageText, timeLabel, isRecognized, emptyFilter, filterActive, filterGames, sampleGames,
+  playersText, durationText, ageText, timeLabel, isRecognized, emptyFilter, filterActive, filterCount, filterGames, sampleGames,
 } from '../components/game-data.js';
 import {
   coverHTML, hydrateCovers, replaceCover, removeGame, openGameForm, openRecognizeDialog,
@@ -58,6 +58,13 @@ const stepper = (key, label, value, unit, min, max) => `<div class="stepper" rol
 
 const chip = (kind, id, label, on, n = null) =>
   `<button type="button" class="chip" data-g="toggle" data-kind="${kind}" data-id="${esc(id)}" aria-pressed="${on}">${esc(label)}${n != null ? `<span class="chip-n">${n}</span>` : ''}</button>`;
+
+/** Knopf „Alle Filter zurücksetzen“: immer an derselben Stelle, ohne gesetzte Filter ausgegraut. */
+const resetAllHTML = () => {
+  const n = filterCount(filter);
+  return `<button type="button" class="btn ${n ? 'btn-primary' : 'btn-ghost'} finder-reset" data-g="reset" ${n ? '' : 'disabled'}>
+    ${icon('x')}<span>Alle Filter zurücksetzen${n ? ` (${n})` : ''}</span></button>`;
+};
 
 /** Bedienfeld „Passende Spiele finden“ (ohne Suchfeld, damit es beim Tippen den Fokus behält). */
 function controlsHTML(games) {
@@ -147,7 +154,10 @@ function resultsHTML(games) {
     ${filterActive(filter) ? `<button type="button" class="btn btn-quiet btn-small" data-g="reset">${icon('x')}<span>Filter zurücksetzen</span></button>` : ''}
   </div>`;
   if (!list.length) {
-    return head + emptyStateHTML({ iconName: 'search', title: 'Kein Spiel passt zu allen Wünschen', text: 'Lockere einen Filter, z. B. die Zeit oder eine Mechanik.' });
+    return head + emptyStateHTML({
+      iconName: 'search', title: 'Kein Spiel passt zu allen Wünschen', text: 'Lockere einen Filter, z. B. die Zeit oder eine Mechanik.',
+      actionsHTML: `<button type="button" class="btn btn-primary" data-g="reset">${icon('x')}<span>Alle Filter zurücksetzen</span></button>`,
+    });
   }
   return `${head}<div class="game-grid">${list.map(cardHTML).join('')}</div>`;
 }
@@ -251,9 +261,10 @@ function renderList(root, store) {
     })}
     <div data-openbar>${openBarHTML(games)}</div>
     ${games.length ? `<section class="panel finder" aria-label="Passende Spiele finden">
-      <div class="panel-head"><h2>Passende Spiele finden</h2></div>
+      <div class="panel-head"><h2>Passende Spiele finden</h2><div data-reset-all>${resetAllHTML()}</div></div>
       <label class="search">${icon('search')}<input type="search" placeholder="Titel, Thema oder Begriff" value="${esc(filter.query)}" data-g="search" aria-label="Spiele durchsuchen"></label>
       <div data-controls>${controlsHTML(games)}</div>
+      <div class="finder-foot" data-reset-all>${resetAllHTML()}</div>
       <p class="hint small">Mechaniken müssen alle zutreffen. Bei Kompetenzen reicht eine; Spiele mit mehr Treffern stehen oben.</p>
     </section>` : ''}
     <div data-results>${resultsHTML(games)}</div>
@@ -273,6 +284,7 @@ function renderList(root, store) {
     const all = store.list('games');
     const controls = root.querySelector('[data-controls]');
     if (controls) controls.innerHTML = controlsHTML(all);
+    root.querySelectorAll('[data-reset-all]').forEach((el) => { el.innerHTML = resetAllHTML(); });
     root.querySelector('[data-results]').innerHTML = resultsHTML(all);
     root.querySelector('[data-openbar]').innerHTML = openBarHTML(all);
     hydrateCovers(root.querySelector('[data-results]'));

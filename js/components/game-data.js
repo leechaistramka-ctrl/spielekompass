@@ -116,6 +116,11 @@ export const isRecognized = (g) => g.recognition?.status === 'done';
 // ---------------------------------------------------------------- Filtern
 export const emptyFilter = () => ({ players: null, age: null, time: null, categories: [], mechanics: [], competences: [], query: '' });
 
+/** Anzahl gesetzter Filter (jede gewählte Kompetenz, Spielart und Mechanik zählt einzeln). */
+export const filterCount = (f) =>
+  [f.players, f.age, f.time].filter((v) => v != null).length
+  + f.categories.length + f.mechanics.length + f.competences.length + (f.query.trim() ? 1 : 0);
+
 export const filterActive = (f) =>
   f.players != null || f.age != null || f.time != null || f.categories.length || f.mechanics.length || f.competences.length || !!f.query.trim();
 
