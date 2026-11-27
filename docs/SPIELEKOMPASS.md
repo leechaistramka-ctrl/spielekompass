@@ -43,6 +43,7 @@ Wichtig: Jede Home-Bildschirm-App hat ihren eigenen Speicher. Spiele zwischen Ge
 - **Spielart**: Kinder-, Familien-, Kenner- oder Expertenspiel (mehrere wählbar).
 - **Mechanik**: Alle gewählten müssen zutreffen.
 - Fehlen einem Spiel Angaben, schließt der Filter es nicht aus.
+- **Alle Filter zurücksetzen** (oben und unten im Filterbereich) setzt alles mit einem Tipp zurück; die Zahl in Klammern zeigt, wie viele Filter gerade gesetzt sind.
 
 ## Datenflüsse
 

@@ -239,6 +239,27 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       assert((await gp.inputValue('[data-g="search"]')) === '', 'Suchfeld nicht geleert');
     });
 
+    await test('Spiele: „Alle Filter zurücksetzen“ zählt gesetzte Filter und zeigt wieder alle Spiele', async () => {
+      const top = '.finder .panel-head [data-g="reset"]';
+      assert(await gp.isDisabled(top), 'Ohne Filter sollte der Knopf ausgegraut sein');
+      await gp.click('[data-g="step"][data-key="players"][data-d="1"]');
+      await gp.click('[data-g="toggle"][data-kind="competences"][data-id="kommunikation"]');
+      await gp.click('[data-g="toggle"][data-kind="mechanics"][data-id="kooperativ"]');
+      await gp.click('[data-g="time"][data-time="15"]');
+      await gp.fill('[data-g="search"]', 'zzz');
+      assert((await cards()) === 0, 'Filter sollte nichts übrig lassen');
+      assert((await gp.textContent(top)).includes('(5)'), 'Anzahl falsch: ' + await gp.textContent(top));
+      assert((await gp.locator('.finder-foot [data-g="reset"]:not([disabled])').count()) === 1, 'Knopf unten fehlt');
+      await gp.click('[data-results] .empty [data-g="reset"]');
+      assert((await cards()) === 11, 'Nicht alle Spiele zu sehen');
+      assert((await gp.inputValue('[data-g="search"]')) === '' && (await gp.textContent('[data-value="players"]')).trim() === 'egal', 'Filter nicht zurückgesetzt');
+      assert((await gp.locator('[data-g="toggle"][aria-pressed="true"], [data-g="time"][aria-pressed="true"]:not([data-time=""])').count()) === 0, 'Chips noch gewählt');
+      assert(await gp.isDisabled(top), 'Knopf sollte wieder ausgegraut sein');
+      await gp.click('[data-g="toggle"][data-kind="categories"][data-id="kinder"]');
+      await gp.click('.finder-foot [data-g="reset"]');
+      assert((await cards()) === 11, 'Knopf unten wirkt nicht');
+    });
+
     let newId;
     const imageSize = (key) => gp.evaluate(async (k) => {
       const db = await new Promise((r) => { const q = indexedDB.open('leeway-spielekompass-bilder'); q.onsuccess = () => r(q.result); });

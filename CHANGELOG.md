@@ -1,5 +1,9 @@
 # Änderungsprotokoll
 
+## 1.0.1 – 27.11.2026
+- Knopf **„Alle Filter zurücksetzen“** oben und unten im Bereich „Passende Spiele finden“: setzt Gruppengröße, Alter, Zeit, Kompetenzen, Spielart, Mechaniken und Suche mit einem Tipp zurück und zeigt wieder alle Spiele. Er zeigt, wie viele Filter gerade gesetzt sind, und ist ohne Filter ausgegraut
+- Passt kein Spiel, steht der Knopf auch direkt im Hinweis „Kein Spiel passt“
+
 ## 1.0.0 – 27.11.2026
 - **Spielekompass als eigenständiges Produkt** von LEEWAY Studio, hervorgegangen aus der Spielothek im LEEWAY Workspace (Stand 0.10.3)
   - Eigene App mit eigenem Namen, Symbol, Speicher und Adresse; startet direkt in der Kartei
