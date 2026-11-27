@@ -1,5 +1,11 @@
 # Änderungsprotokoll
 
+## 1.1.0 – 27.11.2026
+- **Filterbereich ein- und ausklappbar**: Tipp auf „Passende Spiele finden“. Das Gerät merkt sich den Zustand. Gesetzte Filter wirken weiter, „Alle Filter zurücksetzen“ bleibt sichtbar
+- **Eigene Labels** je Spiel: Favorit, Bald wieder spielen, Zur nächsten Runde mitbringen, Noch nie gespielt, Fliegt aus der Sammlung. Mit einem Tipp in der Detailansicht setzen, an der Karte sichtbar, unter „Meine Labels“ filterbar (eines der gewählten reicht)
+- **Spielzeit bis 8 Stunden**: neue Stufen bis 3, 4, 6 und 8 Std.; lange Spiele zeigen die Dauer in Stunden (z. B. „4–8 Std.“)
+- **Deutsches Erklärvideo** je Spiel: Claude schlägt bei der Erkennung ein Video vor (ohne Zusatzkosten über die Claude-App), dazu immer „Deutsches Erklärvideo auf YouTube suchen“. Eigene Adresse unter „Bearbeiten“. YouTube öffnet sich erst beim Antippen
+
 ## 1.0.1 – 27.11.2026
 - Knopf **„Alle Filter zurücksetzen“** oben und unten im Bereich „Passende Spiele finden“: setzt Gruppengröße, Alter, Zeit, Kompetenzen, Spielart, Mechaniken und Suche mit einem Tipp zurück und zeigt wieder alle Spiele. Er zeigt, wie viele Filter gerade gesetzt sind, und ist ohne Filter ausgegraut
 - Passt kein Spiel, steht der Knopf auch direkt im Hinweis „Kein Spiel passt“

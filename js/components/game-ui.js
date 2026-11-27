@@ -10,7 +10,7 @@ import { esc, plural, todayISO } from '../core/utils.js';
 import { openDialog, fieldHTML, toast } from '../core/ui.js';
 import { putImage, getImage, imageURL, deleteImage, blobToDataURL, dataURLToBlob } from '../core/image-store.js';
 import {
-  CATEGORIES, MECHANICS, COMPETENCES, NEW_TITLE, recognitionPrompt, parseRecognition, looksLikeAnswer,
+  CATEGORIES, MECHANICS, COMPETENCES, LABELS, cleanVideoUrl, NEW_TITLE, recognitionPrompt, parseRecognition, looksLikeAnswer,
 } from './game-data.js';
 import { hasApiKey, recognizeGame } from './game-ai.js';
 import { hasBggToken, searchBgg, fetchBggThing, bggPatch } from './game-bgg.js';
@@ -477,6 +477,7 @@ export function openGameForm(store, game = null) {
     { name: 'pedagogy', label: 'Pädagogischer Einsatz', type: 'textarea', rows: 3, wide: true },
     { name: 'tags', label: 'Weitere Schlagworte', wide: true, placeholder: 'durch Komma getrennt', hint: 'Begriffe, die in den Listen unten fehlen.' },
     { name: 'notes', label: 'Eigene Notizen', type: 'textarea', rows: 2, wide: true, placeholder: 'z. B. Varianten, Erfahrungen, fehlendes Material, Standort' },
+    { name: 'videoUrl', label: 'Erklärvideo (YouTube-Adresse)', wide: true, placeholder: 'https://www.youtube.com/watch?v=…', hint: 'Leer lassen, wenn es keins gibt.' },
   ];
   const values = { ...g, tags: (g.tags || []).join(', ') };
   const dlg = openDialog({
@@ -484,6 +485,7 @@ export function openGameForm(store, game = null) {
     className: 'sheet-form sheet-game',
     bodyHTML: `<form data-game-form novalidate>
       <div class="form-grid">${fields.map((f) => fieldHTML(f, values[f.name])).join('')}</div>
+      <h3 class="form-section">Meine Labels</h3>${checkChips('labels', LABELS, g.labels || [])}
       <h3 class="form-section">Mechaniken</h3>${checkChips('mechanics', MECHANICS, g.mechanics || [])}
       <h3 class="form-section">Kompetenzen, die das Spiel fördert</h3>${checkChips('competences', COMPETENCES, g.competences || [])}
       <footer class="sheet-foot">
@@ -507,13 +509,17 @@ export function openGameForm(store, game = null) {
         description: s('description'), pedagogy: s('pedagogy'), notes: s('notes'),
         tags: [...new Set(s('tags').split(',').map((t) => t.trim()).filter(Boolean))],
         mechanics: fd.getAll('mechanics').map(String), competences: fd.getAll('competences').map(String),
+        labels: fd.getAll('labels').map(String),
+        videoUrl: cleanVideoUrl(s('videoUrl')),
       };
+      if (data.videoUrl !== (g.videoUrl || '')) data.videoChannel = '';
       for (const k of NUM_FIELDS) {
         const n = Number.parseInt(s(k), 10);
         data[k] = Number.isFinite(n) && n > 0 ? n : null;
       }
       try {
         if (!data.title) throw new Error('Bitte einen Titel eingeben.');
+        if (s('videoUrl') && !data.videoUrl) throw new Error('Das ist keine YouTube-Adresse (youtube.com/watch?v=… oder youtu.be/…).');
         if (data.playersMin && data.playersMax && data.playersMin > data.playersMax) throw new Error('„Personen von“ ist größer als „Personen bis“.');
         if (data.durationMin && data.durationMax && data.durationMin > data.durationMax) throw new Error('„Dauer von“ ist größer als „Dauer bis“.');
         if (game) {

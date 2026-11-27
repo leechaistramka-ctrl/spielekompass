@@ -386,6 +386,85 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       assert((await gp.textContent('.game-main')).includes('Fehlt: 1 Karte'), 'Notiz nicht angezeigt');
     });
 
+    await test('Spiele: Labels im Spiel setzen, an der Karte sehen und filtern', async () => {
+      await gp.waitForSelector('.game-labels');
+      await gp.click('.game-labels [data-g="label"][data-id="mitbringen"]');
+      await gp.waitForSelector('.game-labels [data-id="mitbringen"][aria-pressed="true"]');
+      await gp.click('.game-labels [data-g="label"][data-id="favorit"]');
+      await gp.waitForSelector('.game-labels [data-id="favorit"][aria-pressed="true"]');
+      let g = (await games()).find((x) => x.id === newId);
+      assert(g.labels.join() === 'favorit,mitbringen', 'Labels falsch: ' + g.labels);
+      await gp.click('.game-labels [data-g="label"][data-id="mitbringen"]');
+      await gp.waitForSelector('.game-labels [data-id="mitbringen"][aria-pressed="false"]');
+      g = (await games()).find((x) => x.id === newId);
+      assert(g.labels.join() === 'favorit', 'Label nicht entfernt');
+      await gp.goto(BASE + '#/games');
+      await gp.waitForSelector('.game-card');
+      assert((await gp.textContent(`.game-card[data-id="${newId}"]`)).includes('Favorit'), 'Label fehlt an der Karte');
+      await gp.click('[data-g="toggle"][data-kind="labels"][data-id="favorit"]');
+      assert((await cards()) === 1, `Favoriten: erwartet 1, gefunden ${await cards()}`);
+      await gp.click('[data-g="toggle"][data-kind="labels"][data-id="aussortieren"]');
+      assert((await cards()) === 1, 'Labels sollten mit „oder“ verknüpft sein');
+      await gp.click('.finder .panel-head [data-g="reset"]');
+    });
+
+    await test('Spiele: Filterbereich ein- und ausklappen, Zustand bleibt; Filter bleiben aktiv', async () => {
+      await gp.click('[data-g="toggle"][data-kind="labels"][data-id="favorit"]');
+      await gp.click('[data-g="fold"]');
+      assert(await gp.isHidden('#finder-body'), 'Filterbereich nicht eingeklappt');
+      assert((await gp.getAttribute('[data-g="fold"]', 'aria-expanded')) === 'false', 'aria-expanded falsch');
+      assert((await cards()) === 1, 'Filter sollte eingeklappt weiter wirken');
+      assert((await gp.textContent('.finder .panel-head [data-g="reset"]')).includes('(1)'), 'Zurücksetzen fehlt im eingeklappten Zustand');
+      await gp.reload();
+      await gp.waitForSelector('.game-card');
+      assert(await gp.isHidden('#finder-body'), 'Eingeklappt-Zustand nicht gemerkt');
+      await gp.click('[data-g="fold"]');
+      assert(await gp.isVisible('#finder-body [data-g="search"]'), 'Filterbereich nicht wieder offen');
+      assert((await cards()) >= 11, 'Nach dem Neuladen sollten alle Spiele zu sehen sein');
+    });
+
+    await test('Spiele: Spielzeit bis 8 Stunden wählbar, lange Spiele in Stunden', async () => {
+      const labels = await gp.$$eval('[data-g="time"]', (bs) => bs.map((b) => b.textContent.trim()));
+      assert(labels.includes('bis 3 Std.') && labels.includes('bis 6 Std.') && labels.includes('bis 8 Std.'), 'Zeitstufen: ' + labels.join(' | '));
+      await gp.evaluate(() => {
+        const r = window.__leeway.store.list('games').find((x) => x.title === 'Risiko');
+        return window.__leeway.store.update('games', r.id, { durationMin: 240, durationMax: 480 });
+      });
+      await gp.waitForFunction(() => document.querySelector('.game-grid')?.textContent.includes('4–8 Std.'));
+      await gp.click('[data-g="time"][data-time="120"]');
+      assert(!(await gp.textContent('.game-grid')).includes('Risiko'), 'Langes Spiel sollte bei 2 Std. fehlen');
+      await gp.click('[data-g="time"][data-time="360"]');
+      assert((await gp.textContent('.game-grid')).includes('Risiko'), 'Langes Spiel fehlt bei 6 Std.');
+      assert((await gp.textContent('.game-card:has-text("Risiko")')).includes('kann länger dauern'), 'Hinweis „kann länger dauern“ fehlt');
+      await gp.click('.finder .panel-head [data-g="reset"]');
+    });
+
+    await test('Spiele: Erklärvideo – YouTube-Suche, Vorschlag aus der Antwort, eigene Adresse', async () => {
+      await gp.click(`.game-card[data-id="${newId}"]`);
+      await gp.waitForSelector('.game-video');
+      const search = await gp.getAttribute('[data-video-search]', 'href');
+      assert(search.startsWith('https://www.youtube.com/results?search_query=') && decodeURIComponent(search).includes('Kakerlakenpoker'), 'Suche falsch: ' + search);
+      assert(!(await gp.$('[data-video]')), 'Ohne Vorschlag sollte kein Video-Knopf da sein');
+      const parsed = await gp.evaluate(async () => {
+        const m = await import('./js/components/game-data.js');
+        const ans = (u) => '```json\n' + JSON.stringify({ 'spielekompass-antwort': 1, spiele: [{ kennung: 'x', titel: 'T', erklaervideo: u, erklaervideo_kanal: 'Hunter & Cron' }] }) + '\n```';
+        return [m.parseRecognition(ans('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), ['x'])[0].patch, m.parseRecognition(ans('javascript:alert(1)'), ['x'])[0].patch];
+      });
+      assert(parsed[0].videoUrl === 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' && parsed[0].videoChannel === 'Hunter & Cron', 'Video aus Antwort nicht übernommen');
+      assert(!parsed[1].videoUrl, 'Unsichere Adresse übernommen');
+      await gp.click('[data-g="edit"]');
+      await fillDialog(gp, { videoUrl: 'https://example.com/video' });
+      await gp.click('dialog[open] [type="submit"]');
+      await gp.waitForSelector('.toast-danger');
+      await fillDialog(gp, { videoUrl: 'https://youtu.be/abcDEF12345' });
+      await gp.click('dialog[open] [type="submit"]');
+      await gp.waitForFunction(() => !document.querySelector('dialog[open]'));
+      await gp.waitForSelector('[data-video]');
+      assert((await gp.getAttribute('[data-video]', 'href')) === 'https://youtu.be/abcDEF12345', 'Eigene Adresse nicht gespeichert');
+      const prompt = await gp.evaluate(async () => (await import('./js/components/game-data.js')).recognitionPrompt([{ game: { id: 'a', title: 'X' }, photo: null }]));
+      assert(prompt.includes('erklaervideo') && prompt.includes('deutschsprachigen Erklärvideos'), 'Auftrag fragt nicht nach Erklärvideo');
+    });
+
     await test('Spiele: mehrere Fotos auf einmal, gemeinsame Erkennung', async () => {
       await gp.goto(BASE + '#/games');
       await gp.waitForSelector('.game-card');

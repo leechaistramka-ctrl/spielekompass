@@ -5,7 +5,7 @@ import { APP } from '../config.js';
 import { emptyStateHTML, pageHeadHTML, confirmDialog, toast } from '../core/ui.js';
 import { href } from '../core/router.js';
 import {
-  CATEGORIES, MECHANICS, COMPETENCES, TIME_STEPS, categoryLabel, mechanicLabel, competenceLabel,
+  CATEGORIES, MECHANICS, COMPETENCES, LABELS, TIME_STEPS, labelLabel, videoSearchUrl, categoryLabel, mechanicLabel, competenceLabel,
   playersText, durationText, ageText, timeLabel, isRecognized, emptyFilter, filterActive, filterCount, filterGames, sampleGames,
 } from '../components/game-data.js';
 import {
@@ -36,6 +36,11 @@ async function recognize(store, games) {
 // Filter bleibt erhalten, solange die App geöffnet ist.
 let filter = emptyFilter();
 let showAllMechanics = false;
+
+// Filterbereich ein- oder ausgeklappt: merkt sich das Gerät (reine Bequemlichkeit, keine Daten).
+const FOLD_KEY = 'leeway-spielekompass-filter-zu';
+const isFolded = () => { try { return localStorage.getItem(FOLD_KEY) === '1'; } catch { return false; } };
+const setFolded = (v) => { try { if (v) localStorage.setItem(FOLD_KEY, '1'); else localStorage.removeItem(FOLD_KEY); } catch { /* privater Modus */ } };
 
 const PHOTO_INPUT = (label, cls = 'btn-primary', multiple = true) =>
   `<label class="btn ${cls} file-btn">${icon('camera')}<span>${esc(label)}</span>
@@ -79,7 +84,14 @@ function controlsHTML(games) {
   const hidden = !showAllMechanics && mechs.length > 10 ? mechs.length - 10 : 0;
   if (hidden) mechs = mechs.filter((m, n) => n < 10 || filter.mechanics.includes(m.id));
 
+  const labs = counted(games, 'labels');
   return `
+    <div class="finder-block">
+      <p class="finder-label">${icon('tag')} Meine Labels</p>
+      <div class="chips wrap" role="group" aria-label="Meine Labels">
+        ${LABELS.map((l) => chip('labels', l.id, l.label, filter.labels.includes(l.id), games.length ? labs.get(l.id) || 0 : null)).join('')}
+      </div>
+    </div>
     <div class="finder-row">
       ${stepper('players', 'Gruppengröße', filter.players, '', 1, 30)}
       ${stepper('age', 'Jüngste Person', filter.age, ' J.', 2, 99)}
@@ -131,6 +143,7 @@ function cardHTML({ game: g, hits, ideal, tight }) {
       ${facts.length ? `<p class="game-facts">${facts.map(esc).join(' · ')}</p>` : ''}
       <div class="game-badges">
         ${g.category ? `<span class="badge cat-${esc(g.category)}">${esc(categoryLabel(g.category))}</span>` : ''}
+        ${(g.labels || []).map((l) => `<span class="badge badge-label label-${esc(l)}">${l === 'favorit' ? icon('star') : ''}${esc(labelLabel(l))}</span>`).join('')}
         ${statusBadge(g)}
         ${filter.competences.length ? `<span class="badge is-hit">${icon('check')}${hits} von ${filter.competences.length} Zielen</span>` : ''}
         ${ideal ? '<span class="badge is-hit">ideale Gruppengröße</span>' : ''}
@@ -260,12 +273,19 @@ function renderList(root, store) {
       actionsHTML: games.length ? `${PHOTO_INPUT('Spiel fotografieren')}<button type="button" class="btn btn-ghost" data-g="new">${icon('plus')}<span>Ohne Foto</span></button>` : '',
     })}
     <div data-openbar>${openBarHTML(games)}</div>
-    ${games.length ? `<section class="panel finder" aria-label="Passende Spiele finden">
-      <div class="panel-head"><h2>Passende Spiele finden</h2><div data-reset-all>${resetAllHTML()}</div></div>
+    ${games.length ? `<section class="panel finder ${isFolded() ? 'is-folded' : ''}" aria-label="Passende Spiele finden">
+      <div class="panel-head">
+        <button type="button" class="finder-toggle" data-g="fold" aria-expanded="${!isFolded()}" aria-controls="finder-body">
+          <h2>Passende Spiele finden</h2><span class="fold-icon">${icon(isFolded() ? 'chevron-right' : 'chevron-down')}</span><span class="visually-hidden">ein- oder ausklappen</span>
+        </button>
+        <div data-reset-all>${resetAllHTML()}</div>
+      </div>
+      <div class="finder-body" id="finder-body" ${isFolded() ? 'hidden' : ''}>
       <label class="search">${icon('search')}<input type="search" placeholder="Titel, Thema oder Begriff" value="${esc(filter.query)}" data-g="search" aria-label="Spiele durchsuchen"></label>
       <div data-controls>${controlsHTML(games)}</div>
       <div class="finder-foot" data-reset-all>${resetAllHTML()}</div>
-      <p class="hint small">Mechaniken müssen alle zutreffen. Bei Kompetenzen reicht eine; Spiele mit mehr Treffern stehen oben.</p>
+      <p class="hint small">Mechaniken müssen alle zutreffen. Bei Kompetenzen und Labels reicht eines; Spiele mit mehr Kompetenz-Treffern stehen oben.</p>
+      </div>
     </section>` : ''}
     <div data-results>${resultsHTML(games)}</div>
     ${games.length ? `<section class="panel kartei-panel">
@@ -378,6 +398,14 @@ function renderList(root, store) {
       refresh();
     }
     if (a === 'more-mech') { showAllMechanics = true; refresh(); }
+    if (a === 'fold') {
+      const folded = !isFolded();
+      setFolded(folded);
+      el.setAttribute('aria-expanded', String(!folded));
+      el.closest('.finder').classList.toggle('is-folded', folded);
+      el.querySelector('.fold-icon').innerHTML = icon(folded ? 'chevron-right' : 'chevron-down');
+      root.querySelector('#finder-body').hidden = folded;
+    }
     if (a === 'reset') {
       filter = emptyFilter();
       const s = root.querySelector('[data-g="search"]');
@@ -465,6 +493,12 @@ function renderDetail(root, store, id, navigate) {
           <div class="btn-row"><button type="button" class="btn btn-primary" data-g="recognize">${icon('sparkle')}<span>${status(g) === 'error' ? 'Erneut versuchen' : 'Mit Claude erkennen'}</span></button></div>
         </section>` : ''}
         ${bggHintHTML(g)}
+        <section class="panel game-labels" aria-label="Meine Labels">
+          <p class="finder-label">${icon('tag')} Meine Labels</p>
+          <div class="chips wrap" role="group" aria-label="Labels setzen">
+            ${LABELS.map((l) => `<button type="button" class="chip" data-g="label" data-id="${esc(l.id)}" aria-pressed="${(g.labels || []).includes(l.id)}">${l.id === 'favorit' ? icon('star') : ''}${esc(l.label)}</button>`).join('')}
+          </div>
+        </section>
         ${g.description ? `<section class="panel"><h2>Worum geht es?</h2><p class="game-text">${esc(g.description)}</p></section>` : ''}
         ${(g.competences || []).length || g.pedagogy ? `<section class="panel"><h2>Pädagogisch</h2>
           ${g.pedagogy ? `<p class="game-text">${esc(g.pedagogy)}</p>` : ''}
@@ -473,6 +507,7 @@ function renderDetail(root, store, id, navigate) {
         ${(g.mechanics || []).length || (g.tags || []).length ? `<section class="panel"><h2>Mechanik</h2>
           <div class="game-badges">${chipsList(g.mechanics || [], mechanicLabel)}${(g.tags || []).map((t) => `<span class="badge badge-tag">${esc(t)}</span>`).join('')}</div>
         </section>` : ''}
+        ${videoHTML(g)}
         ${g.notes ? `<section class="panel"><h2>Eigene Notizen</h2><p class="game-text">${esc(g.notes)}</p></section>` : ''}
         ${g.bggUrl || (g.sources || []).length ? `<section class="panel"><h2>Quellen</h2><ul class="source-list">
           ${g.bggUrl ? `<li><a href="${esc(g.bggUrl)}" target="_blank" rel="noopener noreferrer">${icon('links')}<span>BoardGameGeek</span></a></li>` : ''}
@@ -508,6 +543,13 @@ function renderDetail(root, store, id, navigate) {
       else if (res) toast('Gespeichert');
     }
     if (a === 'delete') await del();
+    if (a === 'label') {
+      const cur = store.get('games', g.id);
+      const list = [...(cur.labels || [])];
+      const i = list.indexOf(el.dataset.id);
+      if (i >= 0) list.splice(i, 1); else list.push(el.dataset.id);
+      await store.update('games', g.id, { labels: LABELS.map((l) => l.id).filter((id) => list.includes(id)) });
+    }
     if (a === 'recognize') await recognize(store, [store.get('games', g.id)]);
     if (a === 'bgg') {
       if (await enqueueBgg(store, [store.get('games', g.id)], { force: true })) toast('Wird mit BoardGameGeek abgeglichen');
@@ -537,6 +579,17 @@ function bggHintHTML(g) {
     return `<p class="small muted recog-again" data-bgg-hint><button type="button" class="btn btn-quiet btn-small" data-g="bgg">${icon('links')}<span>Mit BoardGameGeek abgleichen</span></button></p>`;
   }
   return '';
+}
+
+/** Erklärvideo: vorgeschlagenes Video (aus Claudes Antwort oder von Hand) und immer die YouTube-Suche. */
+function videoHTML(g) {
+  if (!g.title || g.title === 'Neues Spiel') return '';
+  const search = `<a class="btn ${g.videoUrl ? 'btn-quiet' : 'btn-ghost'}" href="${esc(videoSearchUrl(g))}" target="_blank" rel="noopener noreferrer" data-video-search>${icon('search')}<span>${g.videoUrl ? 'Andere Erklärvideos suchen' : 'Deutsches Erklärvideo auf YouTube suchen'}</span></a>`;
+  return `<section class="panel game-video"><h2>${icon('play')} Erklärvideo</h2>
+    ${g.videoUrl ? `<p><a class="btn btn-primary" href="${esc(g.videoUrl)}" target="_blank" rel="noopener noreferrer" data-video>${icon('play')}<span>Erklärvideo ansehen${g.videoChannel ? ` · ${esc(g.videoChannel)}` : ''}</span></a></p>` : ''}
+    <div class="btn-row">${search}</div>
+    <p class="hint small">${g.videoUrl ? 'Vorschlag aus der Erkennung. Eine andere Adresse trägst du unter „Bearbeiten“ ein.' : 'Ein gefundenes Video kannst du unter „Bearbeiten“ eintragen. Bei der Erkennung schlägt Claude meist schon eines vor.'}</p>
+  </section>`;
 }
 
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
