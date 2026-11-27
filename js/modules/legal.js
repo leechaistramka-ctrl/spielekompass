@@ -85,7 +85,7 @@ export const datenschutz = {
         <article class="panel legal-text">
           <h2>Das Wichtigste in Kürze</h2>
           <ul>
-            <li>Alles, was du in dieser Anwendung anlegst (Spiele und ihre Fotos, Einstellungen), wird <strong>nur auf deinem Gerät</strong> gespeichert. Es wird nicht an uns übertragen und nur dann an Dritte, wenn du die optionalen Verbindungen zu BoardGameGeek oder zur Claude API selbst einschaltest (siehe Abschnitt 2).</li>
+            <li>Alles, was du in dieser Anwendung anlegst (Spiele und ihre Fotos, Einstellungen), wird <strong>nur auf deinem Gerät</strong> gespeichert. Es wird nicht an uns übertragen und nur dann an Dritte, wenn du die optionale Verbindung zu BoardGameGeek selbst einschaltest (siehe Abschnitt 2).</li>
             <li>Es gibt <strong>kein Konto, keine Cookies, kein Tracking, keine Statistik</strong> und keine Werbung.</li>
             <li>Schriften und Bilder werden nicht von fremden Servern geladen.</li>
             <li>Beim Aufruf der Anwendung verarbeitet der Webhoster technisch notwendige Verbindungsdaten (siehe Abschnitt 3).</li>
@@ -104,14 +104,9 @@ export const datenschutz = {
 
           <p>Fotos für den Spielekompass nimmst du selbst auf oder wählst sie aus. Die Anwendung speichert sie in der Gerätedatenbank deines Browsers
           (<em>IndexedDB</em>), nicht auf einem Server. Achte darauf, dass auf den Fotos keine Personen oder andere persönlichen Angaben zu sehen sind.</p>
-          <p><strong>Automatische Erkennung (nur wenn du sie einschaltest):</strong> Hinterlegst du im Spielekompass einen eigenen API-Schlüssel, sendet die Anwendung
-          für jedes Spiel das verkleinerte Foto bzw. den Titel direkt von deinem Gerät an die Claude API der Anthropic PBC (USA). Claude erkennt das Spiel,
-          recherchiert dazu im Internet (vor allem auf BoardGameGeek) und liefert die Angaben zurück. Für diese Verarbeitung gelten die Bedingungen und die
-          Datenschutzhinweise von Anthropic, mit dem du dafür selbst einen Vertrag hast; es handelt sich um eine Übermittlung in ein Drittland. Der Schlüssel
-          bleibt im Speicher deines Geräts und ist nicht Teil von Sicherungsdateien. Ohne Schlüssel kannst du Fotos und Auftrag selbst über das Teilen-Menü
-          weitergeben; dann überträgt die Anwendung nichts. Teilst du Fotos an die Claude-App, gelten dafür die Bedingungen deines eigenen Claude-Kontos.
-          Links zu Quellen (z. B. BoardGameGeek) öffnen sich nur, wenn du sie antippst.</p>
-          <p><strong>Abgleich mit BoardGameGeek (nur wenn du ihn einschaltest):</strong> Hinterlegst du im Spielekompass einen eigenen App-Schlüssel von BoardGameGeek,
+          <p><strong>Erkennung über deine Claude-App:</strong> Fotos und Auftrag gibst du selbst über das Teilen-Menü an deine Claude-App weiter; dafür gelten die Bedingungen deines eigenen Claude-Kontos.
+          Die Anwendung selbst überträgt dabei nichts. Links zu Quellen (z. B. BoardGameGeek) öffnen sich nur, wenn du sie antippst.</p>
+          <p><strong>Abgleich mit BoardGameGeek (nur wenn du ihn einschaltest):</strong> Hinterlegst du unter Einstellungen einen eigenen App-Schlüssel von BoardGameGeek,
           fragt die Anwendung für jedes Spiel mit Titel direkt von deinem Gerät die Schnittstelle von BoardGameGeek (BoardGameGeek, LLC, USA) ab. Übertragen werden
           der Spieltitel bzw. die Nummer des Spiels bei BoardGameGeek, der Schlüssel und technisch bedingt deine IP-Adresse, aber keine Fotos. Es gelten die
           Bedingungen und Datenschutzhinweise von BoardGameGeek; es handelt sich um eine Übermittlung in ein Drittland. Der Schlüssel bleibt im Speicher deines

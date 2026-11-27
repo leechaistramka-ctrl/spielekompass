@@ -126,7 +126,7 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
     await page.click('.view a[href="#/datenschutz"]');
     await page.waitForSelector('.view-datenschutz .legal-text');
     const ds = await page.textContent('.view');
-    for (const t of ['Verantwortliche Stelle', 'Hosting', 'statichost.eu', 'BoardGameGeek', 'Claude API', 'Deine Rechte', 'Art. 6 Abs. 1 lit. f DSGVO']) {
+    for (const t of ['Verantwortliche Stelle', 'Hosting', 'statichost.eu', 'BoardGameGeek', 'Claude-App', 'Deine Rechte', 'Art. 6 Abs. 1 lit. f DSGVO']) {
       assert(ds.includes(t), `Datenschutzerklärung: „${t}“ fehlt`);
     }
     for (const t of ['Kalender', 'Spracheingabe', 'Ideenwerkstatt', 'Projekte']) {
@@ -457,133 +457,6 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
     await gc.close();
   }
 
-  // ------------------------------------------------------------------ Spiele: automatisch (Claude API, nachgebildet)
-  {
-    const { ctx: ac, page: ap } = await newPage(browser);
-    const games = () => ap.evaluate(() => window.__leeway.store.state.collections.games);
-    const requests = [];
-    let mode = 'ok';
-    let delay = 0;
-    const fence = '```';
-    const finalText = (title, extra = {}) => `Hier das Ergebnis.\n${fence}json\n${JSON.stringify({ 'spielekompass-antwort': 1, spiele: [{
-      titel: title, verlag: 'Kosmos', jahr: 2019, spieler_min: 2, spieler_max: 5, spieler_ideal: '4', dauer_min: 20, dauer_max: 20,
-      alter_ab: 10, komplexitaet: 2.345, bgg_id: 284083, kategorie: 'kenner', mechaniken: ['kooperativ', 'stichspiel'],
-      kompetenzen: ['zusammenarbeit', 'kommunikation'], beschreibung: 'Kooperatives Stichspiel im Weltall.', paedagogik: 'Absprache üben.',
-      sicherheit: 'hoch', quellen: ['https://boardgamegeek.com/boardgame/284083', 'https://www.kosmos.de/crew', 'javascript:alert(1)'],
-      zuschnitt: { x: 0.25, y: 0.1, breite: 0.5, hoehe: 0.8 }, ...extra }] })}\n${fence}`;
-    await ap.route('https://api.anthropic.com/v1/messages', async (route) => {
-      const req = route.request();
-      const body = JSON.parse(req.postData());
-      requests.push({ headers: req.headers(), body });
-      if (delay) await new Promise((r) => setTimeout(r, delay));
-      const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json' };
-      if (mode === 'auth') return route.fulfill({ status: 401, headers: cors, body: JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }) });
-      const paused = body.messages.length === 1;
-      const content = paused
-        ? [{ type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'boardgamegeek die crew' } },
-           { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_1', content: [] }]
-        : [{ type: 'text', text: finalText(mode === 'second' ? 'Zweites Spiel' : 'Die Crew') }];
-      return route.fulfill({ status: 200, headers: cors, body: JSON.stringify({
-        id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content,
-        stop_reason: paused ? 'pause_turn' : 'end_turn', usage: { input_tokens: 10, output_tokens: 10 } }) });
-    });
-    const photo = async (w, h) => Buffer.from(await ap.evaluate(([w, h]) => {
-      const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
-      const x = c.getContext('2d'); x.fillStyle = '#333'; x.fillRect(0, 0, w, h); x.fillStyle = '#c8a66d'; x.fillRect(w * 0.25, h * 0.1, w * 0.5, h * 0.8);
-      return c.toDataURL('image/png').split(',')[1];
-    }, [w, h]), 'base64');
-
-    await test('Automatisch (Claude API): API-Schlüssel prüfen und nur auf dem Gerät speichern', async () => {
-      await ap.goto(BASE + '#/games');
-      await ap.waitForSelector('[data-g-form="api"]');
-      await ap.fill('#api-key', 'falsch');
-      await ap.click('[data-g-form="api"] [type="submit"]');
-      await ap.waitForSelector('.toast-danger');
-      await ap.fill('#api-key', 'sk-ant-api03-TESTSCHLUESSEL1234');
-      await ap.click('[data-g-form="api"] [type="submit"]');
-      await ap.waitForSelector('#verbindung-api .api-state.is-on');
-      assert((await ap.textContent('#verbindung-api .api-state')).includes('…1234'), 'Schlüsselende nicht angezeigt');
-      const backup = await ap.evaluate(() => JSON.stringify(window.__leeway.store.exportData()));
-      assert(!backup.includes('sk-ant'), 'Schlüssel steht in der Sicherung');
-    });
-
-    let autoId;
-    await test('Automatisch (Claude API): Foto → Claude (mit Websuche, Fortsetzung) → Zuschnitt und Daten ohne Dialog', async () => {
-      await ap.setInputFiles('.view-games .empty [data-g="photos"]', { name: 'crew.png', mimeType: 'image/png', buffer: await photo(1200, 900) });
-      await ap.waitForSelector('.game-card');
-      assert(!(await ap.isVisible('dialog[open]')), 'Es sollte kein Dialog erscheinen');
-      await ap.waitForFunction(() => window.__leeway.store.state.collections.games[0]?.recognition?.status === 'done', null, { timeout: 15000 });
-      const g = (await games())[0];
-      autoId = g.id;
-      assert(g.title === 'Die Crew' && g.category === 'kenner' && g.weight === 2.35 && g.bggUrl === 'https://boardgamegeek.com/boardgame/284083', 'Daten falsch: ' + JSON.stringify(g));
-      assert(g.sources.length === 2 && !g.sources.some((u) => u.startsWith('javascript')), 'Quellen nicht gefiltert');
-      assert(requests.length === 2, `Erwartet 2 Anfragen (pause_turn), gefunden ${requests.length}`);
-      const [first, second] = requests;
-      assert(first.headers['x-api-key'] === 'sk-ant-api03-TESTSCHLUESSEL1234' && first.headers['anthropic-dangerous-direct-browser-access'] === 'true', 'Kopfzeilen fehlen');
-      assert(first.body.model === 'claude-opus-5-5' && first.body.tools.some((t) => t.type === 'web_search_20260209'), 'Modell oder Websuche fehlt');
-      const img = first.body.messages[0].content.find((c) => c.type === 'image');
-      assert(img && img.source.media_type === 'image/jpeg' && img.source.data.length > 1000, 'Foto fehlt in der Anfrage');
-      assert(first.body.messages[0].content.some((c) => c.type === 'text' && c.text.includes('BoardGameGeek')), 'Auftrag nennt BoardGameGeek nicht');
-      assert(second.body.messages.length === 2 && second.body.messages[1].role === 'assistant', 'Fortsetzung falsch');
-      const size = await ap.evaluate(async (id) => {
-        const db = await new Promise((r) => { const q = indexedDB.open('leeway-spielekompass-bilder'); q.onsuccess = () => r(q.result); });
-        const get = (k) => new Promise((r) => { const q = db.transaction('images').objectStore('images').get(k); q.onsuccess = () => r(q.result); });
-        const cover = await createImageBitmap(await get(id));
-        const orig = await createImageBitmap(await get(id + ':original'));
-        return [cover.width, cover.height, orig.width, orig.height];
-      }, autoId);
-      assert(size.join() === '636,747,1200,900', 'Zuschnitt falsch: ' + size.join());
-    });
-
-    await test('Automatisch (Claude API): Detail mit Komplexität und Quellen, Zuschnitt anpassen', async () => {
-      await ap.click(`.game-card[data-id="${autoId}"]`);
-      await ap.waitForSelector('.game-detail');
-      const t = await ap.textContent('.game-main');
-      assert(t.includes('2,35 von 5') && t.includes('BoardGameGeek') && t.includes('kosmos.de'), 'Komplexität oder Quellen fehlen');
-      assert((await ap.getAttribute('.source-list a', 'href')) === 'https://boardgamegeek.com/boardgame/284083', 'BGG-Link falsch');
-      await ap.click('[data-g="recrop"]');
-      await ap.waitForSelector('dialog[open].sheet-crop .crop-img[src]');
-      assert(await ap.evaluate(() => document.querySelector('dialog[open] .crop-img').naturalWidth === 1200), 'Zuschnitt nutzt nicht das ganze Foto');
-      await ap.click('dialog[open] [data-ok]');
-      await ap.waitForSelector('.toast:has-text("Titelbild gespeichert")');
-    });
-
-    await test('Automatisch (Claude API): abgelehnter Schlüssel → Fehler sichtbar, „Erneut versuchen“ klappt', async () => {
-      mode = 'auth';
-      await ap.goto(BASE + '#/games');
-      await ap.waitForSelector('.game-card');
-      await ap.setInputFiles('.page-actions [data-g="photos"]', { name: 'b.png', mimeType: 'image/png', buffer: await photo(800, 800) });
-      await ap.waitForSelector('.badge:has-text("Erkennung fehlgeschlagen")', { timeout: 15000 });
-      await ap.waitForSelector('.toast-danger:has-text("API-Schlüssel")');
-      const failed = (await games()).find((g) => g.recognition.status === 'error');
-      assert(failed && failed.recognition.error.includes('API-Schlüssel'), 'Fehlermeldung nicht gespeichert');
-      mode = 'second';
-      await ap.click(`.game-card[data-id="${failed.id}"]`);
-      await ap.waitForSelector('.recog-hint:has-text("nicht geklappt")');
-      await ap.click('[data-g="recognize"]');
-      await ap.waitForFunction((id) => window.__leeway.store.get('games', id)?.title === 'Zweites Spiel', failed.id, { timeout: 15000 });
-      // Die 401-Antwort oben ist gewollt und landet als Ladefehler in der Konsole.
-      ap.errors = ap.errors.filter((e) => !e.includes('401'));
-    });
-
-    await test('Automatisch (Claude API): Suchfeld behält Fokus, während im Hintergrund erkannt wird', async () => {
-      await ap.goto(BASE + '#/games');
-      await ap.waitForSelector('.game-card');
-      delay = 800;
-      await ap.setInputFiles('.page-actions [data-g="photos"]', { name: 'c.png', mimeType: 'image/png', buffer: await photo(600, 900) });
-      await ap.waitForSelector('.recog-bar.is-busy');
-      await ap.focus('[data-g="search"]');
-      await ap.keyboard.type('crew');
-      await ap.waitForFunction(() => !document.querySelector('.recog-bar.is-busy'), null, { timeout: 15000 });
-      await ap.keyboard.type(' x');
-      assert((await ap.inputValue('[data-g="search"]')) === 'crew x', 'Eingabe ging verloren');
-      assert(await ap.evaluate(() => document.activeElement?.dataset.g === 'search'), 'Suchfeld hat den Fokus verloren');
-      delay = 0;
-      assert(ap.errors.length === 0, 'Konsolenfehler: ' + ap.errors.join(' | '));
-    });
-    await ac.close();
-  }
-
   // ------------------------------------------------------------------ Spiele: BoardGameGeek (nachgebildet)
   {
     const { ctx: bc, page: bp } = await newPage(browser);
@@ -624,14 +497,18 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
     });
     const addGame = (data) => bp.evaluate((d) => window.__leeway.store.create('games', { mechanics: [], competences: [], tags: [], cover: false, recognition: { status: 'open' }, ...d }), data);
 
-    await test('BoardGameGeek: App-Schlüssel prüfen, nur auf dem Gerät, nicht in Sicherungen', async () => {
+    await test('BoardGameGeek: nicht in der Kartei, sondern unter Einstellungen; Schlüssel prüfen, nur auf dem Gerät', async () => {
       await bp.goto(BASE + '#/games');
-      await bp.waitForSelector('[data-g-form="bgg"]');
+      await bp.waitForSelector('.view-games');
+      assert(!(await bp.$('.view-games #verbindung-bgg, .view-games .api-panel')), 'Verbindungen stehen noch in der Kartei');
+      assert(!(await bp.$('#verbindung-api')), 'Claude API sollte entfernt sein');
+      await bp.goto(BASE + '#/settings');
+      await bp.waitForSelector('[data-s-form="bgg"]');
       await bp.fill('#bgg-token', 'kurz');
-      await bp.click('[data-g-form="bgg"] [type="submit"]');
+      await bp.click('[data-s-form="bgg"] [type="submit"]');
       await bp.waitForSelector('.toast-danger');
       await bp.fill('#bgg-token', 'bgg-test-token-0000-1234');
-      await bp.click('[data-g-form="bgg"] [type="submit"]');
+      await bp.click('[data-s-form="bgg"] [type="submit"]');
       await bp.waitForSelector('#verbindung-bgg .api-state.is-on');
       assert((await bp.textContent('#verbindung-bgg .api-state')).includes('…1234'), 'Schlüsselende nicht angezeigt');
       const backup = await bp.evaluate(() => JSON.stringify(window.__leeway.store.exportData()));

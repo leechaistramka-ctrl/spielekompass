@@ -202,37 +202,6 @@ Antworte nur mit einem JSON-Codeblock in genau diesem Format, ohne weiteren Text
 Unbekannte Werte lässt du weg oder setzt null. Erfinde nichts.`;
 }
 
-/** Auftrag für die automatische Erkennung über die Claude API (ein Spiel, mit Websuche). */
-export function autoPrompt(game, hasPhoto) {
-  const known = game.title && game.title !== NEW_TITLE ? game.title : '';
-  const what = hasPhoto
-    ? `Auf dem Foto ist ein Gesellschaftsspiel zu sehen, meist die Schachtel${known ? ` (bisher eingetragen als „${known}“)` : ''}. Erkenne das Spiel.`
-    : `Es geht um das Gesellschaftsspiel „${known}“${game.publisher ? ` (${game.publisher})` : ''}.`;
-  const crop = hasPhoto
-    ? ',\n   "zuschnitt": {"x": 0.1, "y": 0.05, "breite": 0.8, "hoehe": 0.9}'
-    : '';
-  return `Du katalogisierst meine Spielesammlung für die pädagogische Arbeit.
-${what}
-
-Recherchiere mit der Websuche:
-1. Zuerst auf BoardGameGeek (boardgamegeek.com): Spieleranzahl, beste Spielerzahl laut Community-Umfrage, Spieldauer, Mindestalter, Komplexität (Weight, 1 bis 5), Verlag, Jahr, Kategorien und Mechaniken.
-2. Ergänzend aus weiteren verlässlichen Quellen, z. B. Verlagsseite, Spielanleitung, deutsche Rezensionen. Bei deutschen Ausgaben gelten Alter und Dauer der deutschen Schachtel, wenn sie auf dem Foto lesbar sind.
-
-Ordne dann ein:
-${VOCAB()}
-- komplexitaet: BoardGameGeek-Weight als Zahl
-- quellen: die Adressen, die du genutzt hast${hasPhoto ? `
-- zuschnitt: der Bereich des Fotos, in dem die Vorderseite der Schachtel liegt, als Anteile des ganzen Bildes von 0 bis 1 (x und y = linke obere Ecke, breite, hoehe). Möglichst eng an die Kanten der Schachtel.` : ''}
-
-Antworte am Ende mit genau einem JSON-Codeblock in diesem Format:
-\`\`\`json
-{"${ANSWER_MARK}": 1, "spiele": [
-  ${ANSWER_ITEM.replace('"kennung": "…"', `"kennung": "${game.id}"`).replace('ZUSCHNITT', crop)}
-]}
-\`\`\`
-Unbekannte Werte lässt du weg oder setzt null. Erfinde nichts.`;
-}
-
 export const NEW_TITLE = 'Neues Spiel';
 
 const SYN_CATEGORY = { kinderspiel: 'kinder', kind: 'kinder', familienspiel: 'familie', family: 'familie', kennerspiel: 'kenner', experten: 'experte', expertenspiel: 'experte', expert: 'experte' };

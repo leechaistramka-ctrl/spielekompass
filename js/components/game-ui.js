@@ -12,7 +12,6 @@ import { putImage, getImage, imageURL, deleteImage, blobToDataURL, dataURLToBlob
 import {
   CATEGORIES, MECHANICS, COMPETENCES, NEW_TITLE, recognitionPrompt, parseRecognition, looksLikeAnswer,
 } from './game-data.js';
-import { hasApiKey, recognizeGame } from './game-ai.js';
 import { hasBggToken, searchBgg, fetchBggThing, bggPatch } from './game-bgg.js';
 
 const COVER_SIZE = 800; // längste Kante des gespeicherten Titelbilds in Pixeln
@@ -208,13 +207,6 @@ export function openCropDialog(file, { step = '', allowSkip = false } = {}) {
 
 /** Foto eines vorhandenen Spiels ersetzen. */
 export async function replaceCover(store, game, file) {
-  if (hasApiKey()) {
-    const original = await shrink(file, ORIGINAL_SIZE);
-    await putImage(originalKey(game.id), original);
-    await putImage(game.id, await cropFromBox(original, null));
-    await store.update('games', game.id, { cover: true, coverAt: new Date().toISOString() });
-    return true;
-  }
   const blob = await openCropDialog(file);
   if (!blob || blob === 'skip') return false;
   await putImage(game.id, blob);
@@ -223,15 +215,14 @@ export async function replaceCover(store, game, file) {
 }
 
 export async function removeGame(store, game) {
-  forgetQueued(game.id);
   await store.remove('games', game.id);
   for (const key of [game.id, originalKey(game.id)]) {
     try { await deleteImage(key); } catch { /* Bild war schon weg */ }
   }
 }
 
-// ================================================================= Automatisch (Claude API)
-const ORIGINAL_SIZE = 1568; // längste Kante des Fotos, das an Claude geht (mehr nutzt Claude nicht)
+// ================================================================= Fotos
+const ORIGINAL_SIZE = 1568; // längste Kante des gespeicherten Originalfotos (reicht für Erkennung und Zuschnitt)
 export const originalKey = (id) => `${id}:original`;
 
 /** Foto verkleinern (JPEG). Liefert einen Blob. */
@@ -282,95 +273,28 @@ export async function cropFromBox(blob, box) {
   }
 }
 
-// Warteschlange: Spiele werden nacheinander erkannt, damit nichts doppelt läuft.
-const queue = [];
-let active = null;
-export const isQueued = (id) => active === id || queue.includes(id);
-function forgetQueued(id) {
-  const i = queue.indexOf(id);
-  if (i >= 0) queue.splice(i, 1);
-}
-
-/** Spiele zur automatischen Erkennung einreihen. */
-export async function enqueueRecognition(store, games) {
-  for (const g of games) {
-    if (!g || isQueued(g.id)) continue;
-    queue.push(g.id);
-    await store.update('games', g.id, { recognition: { ...(g.recognition || {}), status: 'queued', error: '' } });
-  }
-  runQueue(store);
-}
-
-async function runQueue(store) {
-  if (active) return;
-  while (queue.length) {
-    active = queue.shift();
-    try {
-      await recognizeOne(store, active);
-    } catch (err) {
-      const fatal = !!err.fatal;
-      if (store.get('games', active)) {
-        await store.update('games', active, { recognition: { status: 'error', error: err.message || 'Erkennung fehlgeschlagen.', at: new Date().toISOString() } });
-      }
-      if (fatal) {
-        const rest = queue.splice(0);
-        for (const id of rest) {
-          if (store.get('games', id)) await store.update('games', id, { recognition: { status: 'error', error: err.message } });
-        }
-        toast(err.message, 'danger');
-      }
-    }
-    active = null;
-  }
-}
-
-async function recognizeOne(store, id) {
-  const game = store.get('games', id);
-  if (!game) return;
-  await store.update('games', id, { recognition: { status: 'running', at: new Date().toISOString() } });
-  const original = await getImage(originalKey(id)).catch(() => null);
-  const photo = original || (game.cover ? await getImage(id).catch(() => null) : null);
-  if (!photo && (!game.title || game.title === NEW_TITLE)) throw new Error('Ohne Foto und Titel kann das Spiel nicht erkannt werden.');
-  const b64 = photo ? (await blobToDataURL(photo)).split(',')[1] : null;
-  const patch = await recognizeGame(game, b64);
-  if (!store.get('games', id)) return; // inzwischen gelöscht
-  if (original) {
-    try {
-      await putImage(id, await cropFromBox(original, patch.cropBox || null));
-      patch.cover = true;
-      patch.coverAt = new Date().toISOString();
-    } catch { /* Titelbild bleibt wie es ist */ }
-  }
-  await store.update('games', id, patch);
-  await enqueueBgg(store, [store.get('games', id)], { force: true });
-}
-
-/** Läuft beim Öffnen der Kartei: unterbrochene Erkennungen (z. B. App geschlossen) fortsetzen. */
+/** Läuft beim Öffnen der Kartei: unterbrochene Abgleiche mit BoardGameGeek (z. B. App geschlossen) fortsetzen. */
 export function resumeRecognition(store) {
   if (hasBggToken()) {
     const staleBgg = store.list('games').filter((g) => ['queued', 'running'].includes(g.bgg?.status) && !isBggQueued(g.id));
     if (staleBgg.length) enqueueBgg(store, staleBgg, { force: true });
   }
-  if (!hasApiKey()) return;
-  const stale = store.list('games').filter((g) => ['queued', 'running'].includes(g.recognition?.status) && !isQueued(g.id));
-  if (stale.length) enqueueRecognition(store, stale);
 }
 
-/** Fotos vollautomatisch aufnehmen: speichern, vorläufiges Titelbild, dann Erkennung einreihen. */
-export async function addGamesAutomatically(store, files, { recognize = true } = {}) {
+/** Fotos aufnehmen: Original speichern, vorläufig mittig zuschneiden. Den genauen Zuschnitt liefert später Claudes Antwort. */
+export async function addGamesFromPhotos(store, files) {
   const list = [...files].filter((f) => f.type.startsWith('image/') || /\.(jpe?g|png|heic|webp)$/i.test(f.name));
   const created = [];
   for (const file of list) {
     const original = await shrink(file, ORIGINAL_SIZE);
     const game = await store.create('games', {
-      title: NEW_TITLE, mechanics: [], competences: [], tags: [], cover: false, recognition: { status: recognize ? 'queued' : 'open' },
+      title: NEW_TITLE, mechanics: [], competences: [], tags: [], cover: false, recognition: { status: 'open' },
     });
     await putImage(originalKey(game.id), original);
     await putImage(game.id, await cropFromBox(original, null));
     await store.update('games', game.id, { cover: true, coverAt: new Date().toISOString() });
     created.push(store.get('games', game.id));
   }
-  if (recognize) await enqueueRecognition(store, created);
   return created;
 }
 

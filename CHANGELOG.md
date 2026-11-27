@@ -1,5 +1,10 @@
 # Änderungsprotokoll
 
+## 1.1.0 – 27.11.2026
+- **Claude API entfernt:** Erkannt wird nur noch über das Teilen an die eigene Claude-App (ohne Kosten je Spiel). Die Datenschutzerklärung ist entsprechend kürzer
+- **BoardGameGeek in die Einstellungen verschoben:** Die Kartei zeigt keinen Bereich „Verbindungen“ mehr; der optionale Abgleich ist unter Einstellungen → BoardGameGeek zu finden
+- Aufgeräumt: übrig gebliebene Hilfsdateien aus dem Umzug entfernt
+
 ## 1.0.0 – 27.11.2026
 - **Spielekompass als eigenständiges Produkt** von LEEWAY Studio, hervorgegangen aus der Spielothek im LEEWAY Workspace (Stand 0.10.3)
   - Eigene App mit eigenem Namen, Symbol, Speicher und Adresse; startet direkt in der Kartei

@@ -4,14 +4,13 @@
 
 Installierbare Web-App (PWA) für iPad, iPhone und Computer. Offline nutzbar, ohne Konto, ohne Tracking. Alle Daten bleiben auf dem Gerät.
 
-**Version 1.0.0** · Stand: 27.11.2026
+**Version 1.1.0** · Stand: 27.11.2026
 
 ## Was der Spielekompass kann
 
 - **Spiele fotografieren** (auch mehrere auf einmal). Das Foto bleibt auf dem Gerät.
 - **Erkennen ohne Kosten je Spiel:** Fotos und Auftrag über das Teilen-Menü an die eigene Claude-App geben, Antwort kopieren und mit einem Tipp auf „Antwort übernehmen“ eintragen. Titelbild wird automatisch auf die Schachtel zugeschnitten.
-- **Abgleich mit BoardGameGeek** (kostenloser App-Schlüssel vom eigenen BGG-Konto): Spieleranzahl, beste Spielerzahl, Dauer, Alter, Komplexität, Mechaniken. Spielart und Kompetenzen werden per Regeln abgeleitet, wenn sie fehlen.
-- **Optional vollautomatisch** mit eigenem Claude-API-Schlüssel (kostenpflichtig, etwa 5 bis 20 Cent je Spiel).
+- **Optional: Abgleich mit BoardGameGeek** (unter Einstellungen, kostenloser App-Schlüssel vom eigenen BGG-Konto): Spieleranzahl, beste Spielerzahl, Dauer, Alter, Komplexität, Mechaniken. Spielart und Kompetenzen werden per Regeln abgeleitet, wenn sie fehlen.
 - **Passende Spiele finden:** Gruppengröße, jüngste Person, verfügbare Zeit, Kompetenzziele (z. B. Zusammenarbeit, Frustrationstoleranz), Spielart und Mechaniken kombinierbar, dazu Suche.
 - **Detailansicht** mit Titelbild, Eckdaten, Beschreibung, pädagogischem Einsatz, eigenen Notizen und Quellen. Alles von Hand bearbeitbar, Zuschnitt jederzeit anpassbar.
 - **Kartei sichern und übertragen:** eine Datei mit allen Angaben und Fotos, z. B. für ein zweites Gerät.

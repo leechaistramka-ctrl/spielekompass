@@ -5,7 +5,31 @@ import { esc, formatBytes, formatDateTime, daysAgo, plural } from '../core/utils
 import { pageHeadHTML, confirmDialog, toast } from '../core/ui.js';
 import { href } from '../core/router.js';
 import { clearImages } from '../core/image-store.js';
-import { exportKartei, importKartei } from '../components/game-ui.js';
+import { exportKartei, importKartei, enqueueBgg } from '../components/game-ui.js';
+import { getBggToken, setBggToken } from '../components/game-bgg.js';
+
+const BGG_APPS = 'https://boardgamegeek.com/applications';
+
+/** Optionale Verbindung zu BoardGameGeek (kostenlos, eigener App-Schlüssel, nur auf diesem Gerät). */
+function bggPanelHTML() {
+  const token = getBggToken();
+  return `<section class="panel api-panel" id="verbindung-bgg">
+    <h2>${icon('links')} BoardGameGeek (optional)</h2>
+    ${token
+      ? `<p class="api-state is-on">${icon('check')}<span>Verbunden mit App-Schlüssel …${esc(token.slice(-4))}</span></p>
+        <p class="muted small">Sobald ein Spiel einen Titel hat, holt die App Spieleranzahl, beste Spielerzahl, Dauer, Alter, Komplexität und Mechaniken von BoardGameGeek. Spielart und Kompetenzen leitet sie daraus ab, wenn noch nichts eingetragen ist. Kostenlos.</p>
+        <div class="btn-row">
+          <button type="button" class="btn btn-ghost" data-s="bgg-all">${icon('rotate')}<span>Alle Spiele abgleichen</span></button>
+          <button type="button" class="btn btn-danger-quiet" data-s="bgg-remove">${icon('trash')}<span>Schlüssel entfernen</span></button>
+        </div>`
+      : `<p class="muted small">Nicht nötig: Claudes Antwort enthält bereits alle Angaben. Wer die Eckdaten zusätzlich direkt von BoardGameGeek holen möchte, legt mit dem eigenen BoardGameGeek-Konto unter <a href="${BGG_APPS}" target="_blank" rel="noopener noreferrer">boardgamegeek.com/applications</a> eine Anwendung an (nicht kommerziell), erzeugt dort einen Schlüssel („Token“) und fügt ihn hier ein. Kostenlos, ohne Passwort. Der Schlüssel bleibt nur auf diesem Gerät und ist nicht Teil von Sicherungen.</p>
+        <form class="api-form" data-s-form="bgg">
+          <label class="visually-hidden" for="bgg-token">App-Schlüssel von BoardGameGeek</label>
+          <input id="bgg-token" type="password" name="token" placeholder="App-Schlüssel (Token)" autocomplete="off" spellcheck="false" required>
+          <button type="submit" class="btn btn-primary">${icon('check')}<span>Speichern</span></button>
+        </form>`}
+  </section>`;
+}
 
 const THEMES = [
   { id: 'system', label: 'Automatisch' },
@@ -48,6 +72,8 @@ export default {
           </div>
         </section>
 
+        <div data-bgg>${bggPanelHTML()}</div>
+
         <section class="panel">
           <h2>Speicher & Installation</h2>
           <ul class="kv">
@@ -65,7 +91,7 @@ export default {
           <ul class="kv">
             <li><span>Anwendung</span><strong>${esc(APP.name)} – ${esc(APP.studio)}</strong></li>
             <li><span>Version</span><strong>${esc(APP.version)} (Datenformat ${APP.schemaVersion})</strong></li>
-            <li><span>Externe Dienste</span><strong>Nur wenn du sie einschaltest (BoardGameGeek, Claude API)</strong></li>
+            <li><span>Externe Dienste</span><strong>Nur wenn du sie einschaltest (BoardGameGeek)</strong></li>
             <li><span>Tracking</span><strong>Keines</strong></li>
           </ul>
           <div class="btn-row">
@@ -91,6 +117,17 @@ export default {
       navigator.storage.persisted().then((p) => { persistEl.textContent = p ? 'Ja – vor automatischem Löschen geschützt' : 'Nicht bestätigt'; });
     } else persistEl.textContent = 'Nicht verfügbar';
 
+    root.addEventListener('submit', async (e) => {
+      if (e.target.dataset.sForm !== 'bgg') return;
+      e.preventDefault();
+      const token = String(new FormData(e.target).get('token') || '').trim();
+      if (!/^[\w.-]{16,}$/.test(token)) { toast('Das sieht nicht wie ein App-Schlüssel von BoardGameGeek aus.', 'danger'); return; }
+      setBggToken(token);
+      root.querySelector('[data-bgg]').innerHTML = bggPanelHTML();
+      const n = await enqueueBgg(store, store.list('games').filter((g) => !g.sample));
+      toast(n ? `BoardGameGeek verbunden – ${plural(n, 'Spiel wird', 'Spiele werden')} abgeglichen` : 'BoardGameGeek verbunden');
+    });
+
     root.addEventListener('change', async (e) => {
       if (e.target.dataset?.s !== 'import' || !e.target.files?.[0]) return;
       try {
@@ -107,6 +144,15 @@ export default {
       if (!el) return;
       try {
         if (el.dataset.s === 'theme') await store.setSettings({ theme: el.dataset.theme });
+        if (el.dataset.s === 'bgg-remove') {
+          setBggToken('');
+          root.querySelector('[data-bgg]').innerHTML = bggPanelHTML();
+          toast('Schlüssel entfernt');
+        }
+        if (el.dataset.s === 'bgg-all') {
+          const n = await enqueueBgg(store, store.list('games'), { force: true });
+          toast(n ? `${plural(n, 'Spiel wird', 'Spiele werden')} mit BoardGameGeek abgeglichen` : 'Kein Spiel mit Titel zum Abgleichen');
+        }
         if (el.dataset.s === 'export') toast(`${plural(await exportKartei(store), 'Spiel', 'Spiele')} exportiert`);
         if (el.dataset.s === 'reset') {
           const ok = await confirmDialog({

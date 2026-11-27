@@ -10,27 +10,20 @@ import {
 } from '../components/game-data.js';
 import {
   coverHTML, hydrateCovers, replaceCover, removeGame, openGameForm, openRecognizeDialog,
-  exportKartei, importKartei, chipsList, addGamesAutomatically, enqueueRecognition, resumeRecognition, recropCover,
+  exportKartei, importKartei, chipsList, addGamesFromPhotos, resumeRecognition, recropCover,
   enqueueBgg, applyFromClipboard, canReadClipboard,
 } from '../components/game-ui.js';
-import { hasApiKey, getApiKey, setApiKey, MODEL } from '../components/game-ai.js';
-import { hasBggToken, getBggToken, setBggToken } from '../components/game-bgg.js';
+import { hasBggToken } from '../components/game-bgg.js';
 
 const status = (g) => g.recognition?.status || 'open';
 const isBusy = (g) => ['queued', 'running'].includes(status(g));
 const bggStatus = (g) => g.bgg?.status || '';
 const isBggBusy = (g) => ['queued', 'running'].includes(bggStatus(g));
-const BGG_APPS = 'https://boardgamegeek.com/applications';
 
-/** Erkennen: mit API-Schlüssel automatisch, sonst über das Teilen-Menü. */
+/** Erkennen über das Teilen-Menü an die eigene Claude-App (ohne Kosten je Spiel). */
 async function recognize(store, games) {
   if (!games.length) return;
-  if (hasApiKey()) {
-    await enqueueRecognition(store, games);
-    toast(games.length > 1 ? `${games.length} Spiele werden erkannt` : 'Claude erkennt das Spiel');
-  } else {
-    await openRecognizeDialog(store, games);
-  }
+  await openRecognizeDialog(store, games);
 }
 
 // Filter bleibt erhalten, solange die App geöffnet ist.
@@ -165,72 +158,21 @@ function openBarHTML(games) {
       </div>
     </section>`);
   }
-  if (busy.length) {
-    parts.push(`<section class="dev-bar recog-bar is-busy" aria-live="polite">
-      <div class="dev-bar-text">
-        <strong><span class="spinner" aria-hidden="true"></span>Claude erkennt ${esc(plural(busy.length, 'Spiel', 'Spiele'))}</strong>
-        <span class="small muted">Suche auf BoardGameGeek und weiteren Quellen, Zuschnitt und Einordnung laufen automatisch. Etwa ein bis zwei Minuten je Spiel; die App sollte dabei geöffnet bleiben.</span>
-      </div>
-    </section>`);
-  }
   if (open.length) {
     const errors = open.filter((g) => status(g) === 'error').length;
     parts.push(`<section class="dev-bar recog-bar" aria-label="Noch nicht erkannte Spiele">
       <div class="dev-bar-text">
         <strong>${esc(plural(open.length, 'Spiel ist', 'Spiele sind'))} noch nicht erkannt${errors ? ` (${errors} mit Fehler)` : ''}</strong>
-        <span class="small muted">${hasApiKey() ? 'Claude erkennt sie automatisch und holt die Daten von BoardGameGeek.' : `Fotos und Auftrag gehen über das Teilen-Menü an deine Claude-App (ohne Zusatzkosten). Danach in Claude die Antwort kopieren und hier „Antwort übernehmen“ tippen.${hasBggToken() ? ' Die Daten von BoardGameGeek kommen danach automatisch dazu.' : ''}`}</span>
+        <span class="small muted">Fotos und Auftrag gehen über das Teilen-Menü an deine Claude-App (ohne Zusatzkosten). Danach in Claude die Antwort kopieren und hier „Antwort übernehmen“ tippen.${hasBggToken() ? ' Die Daten von BoardGameGeek kommen danach automatisch dazu.' : ''}</span>
       </div>
       <div class="dev-bar-actions">
-        ${!hasApiKey() && canReadClipboard() ? `<button type="button" class="btn btn-primary" data-g="paste-answer">${icon('upload')}<span>Antwort übernehmen</span></button>` : ''}
-        <button type="button" class="btn ${!hasApiKey() && canReadClipboard() ? 'btn-ghost' : 'btn-primary'}" data-g="recognize-open">${icon('sparkle')}<span>${hasApiKey() ? 'Jetzt erkennen' : 'Mit Claude erkennen'}</span></button>
+        ${canReadClipboard() ? `<button type="button" class="btn btn-primary" data-g="paste-answer">${icon('upload')}<span>Antwort übernehmen</span></button>` : ''}
+        <button type="button" class="btn ${canReadClipboard() ? 'btn-ghost' : 'btn-primary'}" data-g="recognize-open">${icon('sparkle')}<span>Mit Claude erkennen</span></button>
       </div>
     </section>`);
   }
   return parts.join('');
 }
-
-function bggPanelHTML() {
-  const token = getBggToken();
-  return `<div class="api-block" id="verbindung-bgg">
-    <h3>${icon('links')} BoardGameGeek</h3>
-    ${token
-      ? `<p class="api-state is-on">${icon('check')}<span>Verbunden mit App-Schlüssel …${esc(token.slice(-4))}</span></p>
-        <p class="muted small">Sobald ein Spiel einen Titel hat, holt die App Spieleranzahl, beste Spielerzahl, Dauer, Alter, Komplexität und Mechaniken von BoardGameGeek. Spielart und Kompetenzen leitet sie daraus ab, wenn noch nichts eingetragen ist. Kostenlos.</p>
-        <div class="btn-row">
-          <button type="button" class="btn btn-ghost" data-g="bgg-all">${icon('rotate')}<span>Alle Spiele abgleichen</span></button>
-          <button type="button" class="btn btn-danger-quiet" data-g="bgg-remove">${icon('trash')}<span>Schlüssel entfernen</span></button>
-        </div>`
-      : `<p class="muted small">Kostenlos mit deinem BoardGameGeek-Konto: Unter <a href="${BGG_APPS}" target="_blank" rel="noopener noreferrer">boardgamegeek.com/applications</a> eine Anwendung anlegen (nicht kommerziell), dort einen Schlüssel („Token“) erzeugen und hier einfügen. Dein Passwort brauchst du dafür nicht. Der Schlüssel bleibt nur auf diesem Gerät und ist nicht Teil von Sicherungen.</p>
-        <form class="api-form" data-g-form="bgg">
-          <label class="visually-hidden" for="bgg-token">App-Schlüssel von BoardGameGeek</label>
-          <input id="bgg-token" type="password" name="token" placeholder="App-Schlüssel (Token)" autocomplete="off" spellcheck="false" required>
-          <button type="submit" class="btn btn-primary">${icon('check')}<span>Speichern</span></button>
-        </form>`}
-  </div>`;
-}
-
-function claudePanelHTML() {
-  const key = getApiKey();
-  return `<div class="api-block" id="verbindung-api">
-    <h3>${icon('sparkle')} Claude API (optional, kostenpflichtig)</h3>
-    ${key
-      ? `<p class="api-state is-on">${icon('check')}<span>Aktiv mit Schlüssel …${esc(key.slice(-4))} · Modell ${esc(MODEL)}</span></p>
-        <p class="muted small">Neue Fotos werden ohne Teilen-Schritt erkannt, zugeschnitten und eingeordnet. Kosten: je Spiel grob 5 bis 20 Cent, abgerechnet über die Claude Console.</p>
-        <div class="btn-row"><button type="button" class="btn btn-danger-quiet" data-g="api-remove">${icon('trash')}<span>Schlüssel entfernen</span></button></div>`
-      : `<p class="muted small">Nicht nötig: Ohne Schlüssel teilst du die Fotos an deine Claude-App, das ist mit deinem Abo abgedeckt. Nur wer auch diesen Schritt sparen will, hinterlegt einen API-Schlüssel der Claude Console; dann kostet jedes Spiel etwas.</p>
-        <form class="api-form" data-g-form="api">
-          <label class="visually-hidden" for="api-key">API-Schlüssel</label>
-          <input id="api-key" type="password" name="key" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" required>
-          <button type="submit" class="btn btn-ghost">${icon('check')}<span>Speichern</span></button>
-        </form>`}
-  </div>`;
-}
-
-const apiPanelHTML = () => `<section class="panel api-panel">
-  <h2>${icon('settings')} Verbindungen</h2>
-  ${bggPanelHTML()}
-  ${claudePanelHTML()}
-</section>`;
 
 // ================================================================= Liste
 /** Erinnerung an die Sicherung, wenn die letzte Kartei zu alt ist. */
@@ -265,7 +207,7 @@ function renderList(root, store) {
         <label class="btn btn-ghost file-btn">${icon('upload')}<span>Kartei einspielen …</span><input type="file" accept="application/json,.json" data-g="import" class="visually-hidden"></label>
       </div>
     </section>` : ''}
-    <div data-api>${apiPanelHTML()}</div>`;
+`;
   hydrateCovers(root);
   resumeRecognition(store);
 
@@ -281,28 +223,6 @@ function renderList(root, store) {
   root.__refresh = refresh;
   root.__count = games.length;
 
-  root.addEventListener('submit', async (e) => {
-    if (e.target.dataset.gForm === 'bgg') {
-      e.preventDefault();
-      const token = String(new FormData(e.target).get('token') || '').trim();
-      if (!/^[\w.-]{16,}$/.test(token)) { toast('Das sieht nicht wie ein App-Schlüssel von BoardGameGeek aus.', 'danger'); return; }
-      setBggToken(token);
-      root.querySelector('[data-api]').innerHTML = apiPanelHTML();
-      const n = await enqueueBgg(store, store.list('games').filter((g) => !g.sample));
-      toast(n ? `BoardGameGeek verbunden – ${plural(n, 'Spiel wird', 'Spiele werden')} abgeglichen` : 'BoardGameGeek verbunden');
-      refresh();
-      return;
-    }
-    if (e.target.dataset.gForm !== 'api') return;
-    e.preventDefault();
-    const key = String(new FormData(e.target).get('key') || '').trim();
-    if (!/^sk-ant-[\w-]{10,}$/.test(key)) { toast('Das sieht nicht wie ein API-Schlüssel aus (beginnt mit „sk-ant-“).', 'danger'); return; }
-    setApiKey(key);
-    root.querySelector('[data-api]').innerHTML = apiPanelHTML();
-    refresh();
-    toast('Automatische Erkennung ist aktiv');
-  });
-
   root.addEventListener('input', (e) => {
     if (e.target.matches('[data-g="search"]')) { filter.query = e.target.value; refresh(); }
   });
@@ -311,19 +231,10 @@ function renderList(root, store) {
     if (g === 'photos' && e.target.files?.length) {
       const files = [...e.target.files];
       e.target.value = '';
-      if (hasApiKey()) {
-        try {
-          const created = await addGamesAutomatically(store, files);
-          if (created.length) toast(`${plural(created.length, 'Foto', 'Fotos')} übernommen – Claude erkennt jetzt`);
-        } catch (err) {
-          toast(err.message, 'danger');
-        }
-        return;
-      }
-      // Ohne API-Schlüssel: Foto speichern, vorläufig mittig zuschneiden, dann an die Claude-App teilen.
+      // Foto speichern, vorläufig mittig zuschneiden, dann an die Claude-App teilen.
       // Den genauen Zuschnitt liefert Claude in der Antwort mit.
       try {
-        const created = await addGamesAutomatically(store, files, { recognize: false });
+        const created = await addGamesFromPhotos(store, files);
         if (created.length) {
           toast(`${plural(created.length, 'Spiel', 'Spiele')} angelegt`);
           await openRecognizeDialog(store, created);
@@ -389,21 +300,6 @@ function renderList(root, store) {
       }
     }
     if (a === 'recognize-open') await recognize(store, store.list('games').filter((g) => !isBusy(g) && !isRecognized(g)));
-    if (a === 'bgg-remove') {
-      setBggToken('');
-      root.querySelector('[data-api]').innerHTML = apiPanelHTML();
-      toast('Schlüssel entfernt');
-    }
-    if (a === 'bgg-all') {
-      const n = await enqueueBgg(store, store.list('games'), { force: true });
-      toast(n ? `${plural(n, 'Spiel wird', 'Spiele werden')} mit BoardGameGeek abgeglichen` : 'Kein Spiel mit Titel zum Abgleichen');
-    }
-    if (a === 'api-remove') {
-      setApiKey('');
-      root.querySelector('[data-api]').innerHTML = apiPanelHTML();
-      refresh();
-      toast('Schlüssel entfernt');
-    }
     if (a === 'export') {
       try { toast(`${plural(await exportKartei(store), 'Spiel', 'Spiele')} exportiert`); } catch (err) { toast(err.message, 'danger'); }
     }
