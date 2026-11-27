@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Spielekompass · LEEWAY Studio</title>
+  <meta name="description" content="Spielekompass von LEEWAY Studio: die eigene Spielesammlung als Kartei – mit Fotos, Einordnung und Filtern für die pädagogische Arbeit">
+  <meta name="theme-color" content="#193126">
+  <meta name="color-scheme" content="dark light">
+  <meta name="referrer" content="no-referrer">
+
+  <!-- Installation als App (PWA) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Spielekompass">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <link rel="icon" href="assets/icons/icon-192.png" type="image/png">
+
+  <!-- Farbschema sofort setzen, damit beim Start nichts aufblitzt -->
+  <script>
+    try {
+      var s = JSON.parse(localStorage.getItem('leeway-spielekompass') || '{}').settings || {};
+      var dark = s.theme === 'dark' || (s.theme !== 'light' && !matchMedia('(prefers-color-scheme: light)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    } catch (e) {}
+  </script>
+
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/modules.css">
+</head>
+<body>
+  <a class="skip-link" href="#view">Zum Inhalt springen</a>
+  <div class="app">
+    <aside class="sidebar" aria-label="Hauptnavigation">
+      <a class="brand" href="#/games">
+        <img class="brand-full" src="assets/brand/wortbildmarke-hellgold.svg" alt="LEEWAY Studio" width="190" height="82">
+        <img class="brand-signet" src="assets/brand/signet-hellgold.svg" alt="LEEWAY Studio" width="56" height="41">
+        <span class="brand-sub">Spielekompass</span>
+      </a>
+      <nav id="sidebar-nav"></nav>
+      <p class="sidebar-tagline" id="brand-tagline">Raum für Möglichkeiten</p>
+    </aside>
+
+    <main id="view" class="main" tabindex="-1">
+      <noscript><p class="noscript">Diese Anwendung benötigt JavaScript.</p></noscript>
+    </main>
+
+    <nav id="tabbar" class="tabbar" aria-label="Navigation"></nav>
+  </div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
