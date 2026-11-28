@@ -5,7 +5,7 @@ import { APP } from '../config.js';
 import { emptyStateHTML, pageHeadHTML, confirmDialog, toast } from '../core/ui.js';
 import { href } from '../core/router.js';
 import {
-  CATEGORIES, MECHANICS, COMPETENCES, LABELS, TIME_STEPS, labelLabel, videoSearchUrl, categoryLabel, mechanicLabel, competenceLabel,
+  CATEGORIES, MECHANICS, COMPETENCES, LABELS, TIME_STEPS, labelLabel, videoSearchUrl, mergeExpansions, sortExpansions, categoryLabel, mechanicLabel, competenceLabel,
   playersText, durationText, ageText, timeLabel, isRecognized, emptyFilter, filterActive, filterCount, filterGames, sampleGames,
 } from '../components/game-data.js';
 import {
@@ -143,6 +143,7 @@ function cardHTML({ game: g, hits, ideal, tight }) {
       ${facts.length ? `<p class="game-facts">${facts.map(esc).join(' · ')}</p>` : ''}
       <div class="game-badges">
         ${g.category ? `<span class="badge cat-${esc(g.category)}">${esc(categoryLabel(g.category))}</span>` : ''}
+        ${(g.expansions || []).some((x) => x.owned) ? `<span class="badge badge-tag">+ ${esc(plural((g.expansions || []).filter((x) => x.owned).length, 'Erweiterung', 'Erweiterungen'))}</span>` : ''}
         ${(g.labels || []).map((l) => `<span class="badge badge-label label-${esc(l)}">${l === 'favorit' ? icon('star') : ''}${esc(labelLabel(l))}</span>`).join('')}
         ${statusBadge(g)}
         ${filter.competences.length ? `<span class="badge is-hit">${icon('check')}${hits} von ${filter.competences.length} Zielen</span>` : ''}
@@ -507,6 +508,7 @@ function renderDetail(root, store, id, navigate) {
         ${(g.mechanics || []).length || (g.tags || []).length ? `<section class="panel"><h2>Mechanik</h2>
           <div class="game-badges">${chipsList(g.mechanics || [], mechanicLabel)}${(g.tags || []).map((t) => `<span class="badge badge-tag">${esc(t)}</span>`).join('')}</div>
         </section>` : ''}
+        ${expansionsHTML(g)}
         ${videoHTML(g)}
         ${g.notes ? `<section class="panel"><h2>Eigene Notizen</h2><p class="game-text">${esc(g.notes)}</p></section>` : ''}
         ${g.bggUrl || (g.sources || []).length ? `<section class="panel"><h2>Quellen</h2><ul class="source-list">
@@ -533,6 +535,18 @@ function renderDetail(root, store, id, navigate) {
       try { if (await replaceCover(store, g, file)) toast('Titelbild gespeichert'); } catch (err) { toast(err.message, 'danger'); }
     }
   });
+  root.addEventListener('submit', async (e) => {
+    if (e.target.dataset.gForm !== 'exp-add') return;
+    e.preventDefault();
+    const name = String(new FormData(e.target).get('name') || '').trim();
+    if (!name) return;
+    const cur = store.get('games', g.id);
+    const expansions = mergeExpansions(cur.expansions, [{ name }], 'hand');
+    const added = expansions.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    if (added && (cur.expansions || []).every((x) => x.key !== added.key)) added.owned = true; // neu eingetragen = meist vorhanden
+    await store.update('games', g.id, { expansions });
+    toast('Erweiterung ergänzt');
+  });
   root.addEventListener('click', async (e) => {
     const el = e.target.closest('[data-g]');
     if (!el) return;
@@ -543,6 +557,19 @@ function renderDetail(root, store, id, navigate) {
       else if (res) toast('Gespeichert');
     }
     if (a === 'delete') await del();
+    if (a === 'exp-own' || a === 'exp-del') {
+      const cur = store.get('games', g.id);
+      const key = el.dataset.key;
+      const expansions = (cur.expansions || [])
+        .filter((x) => !(a === 'exp-del' && x.key === key))
+        .map((x) => (a === 'exp-own' && x.key === key ? { ...x, owned: !x.owned } : x));
+      await store.update('games', g.id, { expansions });
+    }
+    if (a === 'exp-all') {
+      expandedAll = g.id;
+      const sec = root.querySelector('.game-expansions');
+      if (sec) sec.outerHTML = expansionsHTML(store.get('games', g.id));
+    }
     if (a === 'label') {
       const cur = store.get('games', g.id);
       const list = [...(cur.labels || [])];
@@ -579,6 +606,40 @@ function bggHintHTML(g) {
     return `<p class="small muted recog-again" data-bgg-hint><button type="button" class="btn btn-quiet btn-small" data-g="bgg">${icon('links')}<span>Mit BoardGameGeek abgleichen</span></button></p>`;
   }
   return '';
+}
+
+// Erweiterungen: lange Listen (z. B. Carcassonne) zunächst gekürzt.
+const EXP_SHOWN = 12;
+let expandedAll = null; // ID des Spiels, bei dem alle Erweiterungen gezeigt werden
+
+function expansionsHTML(g) {
+  if (!g.title || g.title === 'Neues Spiel') return '';
+  const list = sortExpansions(g.expansions || []);
+  const owned = list.filter((x) => x.owned).length;
+  const all = expandedAll === g.id;
+  const shown = all ? list : list.filter((x, n) => x.owned || n < EXP_SHOWN);
+  const more = list.length - shown.length;
+  const item = (x) => `<li class="exp-item">
+      <button type="button" class="check-row" data-g="exp-own" data-key="${esc(x.key)}" aria-pressed="${!!x.owned}">
+        <span class="check-box" aria-hidden="true">${x.owned ? icon('check') : ''}</span>
+        <span class="exp-name">${esc(x.name)}${x.year ? ` <span class="muted small">(${esc(x.year)})</span>` : ''}</span>
+      </button>
+      ${x.source === 'hand' ? `<button type="button" class="btn btn-icon btn-quiet" data-g="exp-del" data-key="${esc(x.key)}" aria-label="${esc(x.name)} entfernen">${icon('x')}</button>` : ''}
+    </li>`;
+  return `<section class="panel game-expansions" aria-label="Erweiterungen">
+    <div class="panel-head"><h2>Erweiterungen</h2>${list.length ? `<span class="badge ${owned ? 'is-hit' : 'badge-open'}" data-exp-count>${owned} von ${list.length} vorhanden</span>` : ''}</div>
+    ${list.length ? `<p class="hint small">Antippen, was du besitzt.</p><ul class="exp-list">${shown.map(item).join('')}</ul>
+      ${more ? `<button type="button" class="btn btn-quiet btn-small" data-g="exp-all">Alle ${list.length} zeigen</button>` : ''}`
+      : `<p class="muted small">Noch keine Erweiterungen bekannt. ${hasBggToken() ? 'Ein Abgleich mit BoardGameGeek holt die Liste.' : 'Bei der nächsten Erkennung listet Claude sie mit auf, mit BoardGameGeek-Schlüssel kommen sie automatisch.'}</p>`}
+    <div class="btn-row exp-actions">
+      ${hasBggToken() && !isBggBusy(g) ? `<button type="button" class="btn btn-ghost btn-small" data-g="bgg">${icon('rotate')}<span>Liste von BoardGameGeek aktualisieren</span></button>` : ''}
+    </div>
+    <form class="exp-add" data-g-form="exp-add">
+      <label class="visually-hidden" for="exp-name">Erweiterung von Hand ergänzen</label>
+      <input id="exp-name" name="name" type="text" maxlength="140" placeholder="Fehlt eine? Name eintragen" autocomplete="off">
+      <button type="submit" class="btn btn-ghost">${icon('plus')}<span>Ergänzen</span></button>
+    </form>
+  </section>`;
 }
 
 /** Erklärvideo: vorgeschlagenes Video (aus Claudes Antwort oder von Hand) und immer die YouTube-Suche. */

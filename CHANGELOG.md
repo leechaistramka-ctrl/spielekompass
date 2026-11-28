@@ -1,5 +1,12 @@
 # Änderungsprotokoll
 
+## 1.2.0 – 28.11.2026
+- **Erweiterungen je Spiel**: Die veröffentlichten Erweiterungen kommen automatisch, ohne sie einzeln zu scannen
+  - Aus Claudes Antwort (deutsche Namen, ohne Zusatzkosten über die Claude-App) und mit BoardGameGeek-Schlüssel aus BoardGameGeek. Doppelte werden über die BGG-Nummer zusammengelegt, Fan-Erweiterungen weggelassen
+  - In der Ansicht eines Spiels antippen, was du besitzt („2 von 7 vorhanden“); vorhandene stehen oben, lange Listen sind gekürzt
+  - Fehlende von Hand ergänzen (und wieder entfernen); „Liste von BoardGameGeek aktualisieren“ behält deine Häkchen
+  - An der Karte steht „+ 2 Erweiterungen“; die Suche findet Spiele auch über vorhandene Erweiterungen
+
 ## 1.1.0 – 27.11.2026
 - **Filterbereich ein- und ausklappbar**: Tipp auf „Passende Spiele finden“. Das Gerät merkt sich den Zustand. Gesetzte Filter wirken weiter, „Alle Filter zurücksetzen“ bleibt sichtbar
 - **Eigene Labels** je Spiel: Favorit, Bald wieder spielen, Zur nächsten Runde mitbringen, Noch nie gespielt, Fliegt aus der Sammlung. Mit einem Tipp in der Detailansicht setzen, an der Karte sichtbar, unter „Meine Labels“ filterbar (eines der gewählten reicht)

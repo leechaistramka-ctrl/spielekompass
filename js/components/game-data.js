@@ -11,6 +11,7 @@
  *   description, pedagogy, notes,
  *   labels: ['favorit', …],                // eigene Markierungen, siehe LABELS
  *   videoUrl, videoChannel,                // deutsches Erklärvideo (YouTube), optional
+ *   expansions: [{ key, name, bggId, year, owned, source: 'bgg' | 'claude' | 'hand' }],
  *   cover: true | false, coverAt,          // Titelbild liegt in IndexedDB (core/image-store.js)
  *   recognition: { status: 'open' | 'done', at, confidence: 'hoch' | 'mittel' | 'niedrig' },
  *   createdAt, updatedAt
@@ -147,6 +148,48 @@ export function parseRange(s) {
 
 export const isRecognized = (g) => g.recognition?.status === 'done';
 
+// ---------------------------------------------------------------- Erweiterungen
+const expKey = (x) => (x.bggId ? `bgg-${x.bggId}` : `n-${norm(x.name).replace(/[^a-z0-9äöüß]+/g, '-')}`);
+
+/**
+ * Führt eine neue Liste von Erweiterungen mit der vorhandenen zusammen.
+ * Nichts geht verloren: „besitze ich“-Häkchen und selbst eingetragene bleiben, Doppelte (gleiche BGG-Nummer
+ * oder gleicher Name) werden zusammengelegt. Deutsche Namen (aus Claudes Antwort oder von Hand) haben Vorrang.
+ */
+export function mergeExpansions(existing = [], incoming = [], source = 'bgg') {
+  const out = (existing || []).map((x) => ({ ...x }));
+  for (const raw of incoming || []) {
+    const name = String(raw?.name || '').trim().slice(0, 140);
+    if (!name) continue;
+    const bggId = Number.isInteger(raw.bggId) && raw.bggId > 0 ? raw.bggId : null;
+    const year = Number.isInteger(raw.year) ? raw.year : null;
+    const hit = out.find((x) => (bggId && x.bggId === bggId) || norm(x.name) === norm(name));
+    if (hit) {
+      if (bggId && !hit.bggId) hit.bggId = bggId;
+      if (year && !hit.year) hit.year = year;
+      if (source !== 'bgg' && hit.source === 'bgg') { hit.name = name; hit.source = source; }
+      hit.key = expKey(hit);
+    } else {
+      const x = { name, bggId, year, owned: false, source };
+      out.push({ ...x, key: expKey(x) });
+    }
+  }
+  return out;
+}
+
+/** Wendet die in einer Antwort gefundenen Erweiterungen auf ein Spiel an (vor dem Speichern aufrufen). */
+export function resolveExpansions(game, patch) {
+  if (patch.expansionsFound) {
+    patch.expansions = mergeExpansions(game?.expansions, patch.expansionsFound, 'claude');
+    delete patch.expansionsFound;
+  }
+  return patch;
+}
+
+/** Sortierung für die Anzeige: vorhandene zuerst, dann nach Jahr und Name. */
+export const sortExpansions = (list = []) => [...list].sort((a, b) => Number(b.owned) - Number(a.owned)
+  || (a.year || 9999) - (b.year || 9999) || String(a.name).localeCompare(String(b.name), 'de'));
+
 // ---------------------------------------------------------------- Filtern
 export const emptyFilter = () => ({ players: null, age: null, time: null, categories: [], mechanics: [], competences: [], labels: [], query: '' });
 
@@ -183,7 +226,8 @@ export function filterGames(games, f) {
     const hits = f.competences.filter((c) => (g.competences || []).includes(c)).length;
     if (f.competences.length && !hits) continue;
     if (q && !norm([g.title, g.publisher, g.description, g.pedagogy, g.notes, ...(g.tags || []),
-      ...mech.map(mechanicLabel), ...(g.competences || []).map(competenceLabel)].join(' ')).includes(q)) continue;
+      ...mech.map(mechanicLabel), ...(g.competences || []).map(competenceLabel),
+      ...(g.expansions || []).filter((x) => x.owned).map((x) => x.name)].join(' ')).includes(q)) continue;
     const best = parseRange(g.playersBest);
     const ideal = f.players != null && !!best && f.players >= best.min && f.players <= best.max;
     const tight = f.time != null && !!g.durationMax && g.durationMax > f.time;
@@ -206,7 +250,8 @@ const VOCAB = () => `- kategorie: genau einer dieser Werte: ${CATEGORIES.map((c)
 - paedagogik: 1 bis 2 Sätze auf Deutsch: wofür es sich in der pädagogischen Arbeit eignet und worauf man achten sollte
 - sicherheit: hoch, mittel oder niedrig (wie sicher du bist, das richtige Spiel erkannt zu haben)
 - erklaervideo: Adresse eines deutschsprachigen Erklärvideos (Regelerklärung) auf YouTube, gern von bekannten deutschen Kanälen wie Hunter & Cron oder Spiel doch mal!. Nur eine Adresse, die du wirklich gefunden hast; sonst weglassen
-- erklaervideo_kanal: Name des Kanals (optional)`;
+- erklaervideo_kanal: Name des Kanals (optional)
+- erweiterungen: alle bisher offiziell veröffentlichten Erweiterungen des Spiels (keine Fan-Erweiterungen, keine eigenständigen Nachfolger), je mit deutschem Namen, falls es eine deutsche Ausgabe gibt, BoardGameGeek-Nummer und Jahr. Gibt es keine, eine leere Liste`;
 
 const ANSWER_ITEM = `{"kennung": "…", "titel": "…", "verlag": "…", "jahr": 2015,
    "spieler_min": 2, "spieler_max": 8, "spieler_ideal": "4-6",
@@ -215,6 +260,7 @@ const ANSWER_ITEM = `{"kennung": "…", "titel": "…", "verlag": "…", "jahr":
    "kategorie": "familie", "mechaniken": ["party"], "kompetenzen": ["kommunikation"],
    "schlagworte": [], "beschreibung": "…", "paedagogik": "…", "sicherheit": "hoch",
    "erklaervideo": "https://www.youtube.com/watch?v=…", "erklaervideo_kanal": "…",
+   "erweiterungen": [{"name": "…", "bgg_id": 123456, "jahr": 2018}],
    "quellen": ["https://…"]ZUSCHNITT}`;
 
 /**
@@ -376,6 +422,12 @@ export function parseRecognition(raw, ids, { strict = false } = {}) {
     if (bggId) { patch.bggId = bggId; patch.bggUrl = `https://boardgamegeek.com/boardgame/${bggId}`; }
     const urls = (Array.isArray(it.quellen) ? it.quellen : []).filter((u) => typeof u === 'string' && /^https:\/\/[^\s"<>]+$/.test(u)).slice(0, 8);
     if (urls.length) patch.sources = urls;
+    if (Array.isArray(it.erweiterungen)) {
+      const found = it.erweiterungen.slice(0, 80).map((e) => (typeof e === 'string' ? { name: e } : e && typeof e === 'object'
+        ? { name: text(e.name, 140), bggId: toInt(e.bgg_id, 1, 99999999), year: toInt(e.jahr, 1900, 2100) } : null))
+        .filter((e) => e && e.name && !/fan[- ]?(expansion|erweiterung)/i.test(e.name));
+      if (found.length) patch.expansionsFound = found;
+    }
     const video = cleanVideoUrl(it.erklaervideo);
     if (video) { patch.videoUrl = video; patch.videoChannel = text(it.erklaervideo_kanal, 60) || ''; }
     const z = it.zuschnitt;

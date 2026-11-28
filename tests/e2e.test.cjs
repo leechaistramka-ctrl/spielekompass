@@ -704,6 +704,10 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       <link type="boardgamecategory" id="1" value="Card Game"/><link type="boardgamecategory" id="2" value="Space Exploration"/>
       <link type="boardgamemechanic" id="3" value="Cooperative Game"/><link type="boardgamemechanic" id="4" value="Trick-taking"/><link type="boardgamemechanic" id="5" value="Communication Limits"/>
       <link type="boardgamepublisher" id="6" value="KOSMOS"/>
+      <link type="boardgameexpansion" id="401" value="The Crew: Promo Mission"/>
+      <link type="boardgameexpansion" id="402" value="The Crew: Bonus Missions"/>
+      <link type="boardgameexpansion" id="403" value="The Crew: More Planets (Fan expansion)"/>
+      <link type="boardgameexpansion" id="404" value="Base Game X" inbound="true"/>
       <statistics page="1"><ratings><averageweight value="1.98"/></ratings></statistics>
     </item></items>`;
     await bp.route('https://boardgamegeek.com/xmlapi2/**', async (route) => {
@@ -749,6 +753,7 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       assert(g.playersMin === 2 && g.playersMax === 5 && g.playersBest === '4' && g.durationMin === 20 && g.ageMin === 10, 'Fakten falsch: ' + JSON.stringify(g));
       assert(g.weight === 1.98 && g.year === 2019 && g.publisher === 'KOSMOS' && g.bggUrl === 'https://boardgamegeek.com/boardgame/284083', 'Eckdaten falsch');
       assert(g.title === 'Die Crew', 'Deutscher Titel wurde überschrieben');
+      assert(g.expansions.map((x) => x.bggId).join() === '401,402' && g.expansions.every((x) => !x.owned), 'Erweiterungen von BGG falsch: ' + JSON.stringify(g.expansions));
       assert(g.mechanics.includes('kooperativ') && g.mechanics.includes('stichspiel'), 'Mechaniken: ' + g.mechanics.join());
       assert(g.category === 'kenner', 'Spielart: ' + g.category);
       assert(g.competences[0] === 'zusammenarbeit' && g.competences.includes('kommunikation') && g.competences.length <= 6, 'Kompetenzen: ' + g.competences.join());
@@ -765,7 +770,8 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       calls.length = 0;
       const g0 = await addGame({ title: 'Neues Spiel' });
       const answer = '```json\n' + JSON.stringify({ 'spielekompass-antwort': 1, spiele: [{ kennung: g0.id, titel: 'Die Crew – Mission Tiefsee', bgg_id: 284083,
-        spieler_min: 2, spieler_max: 6, alter_ab: 8, kategorie: 'familie', mechaniken: ['stichspiel'], kompetenzen: ['empathie'], sicherheit: 'hoch' }] }) + '\n```';
+        spieler_min: 2, spieler_max: 6, alter_ab: 8, kategorie: 'familie', mechaniken: ['stichspiel'], kompetenzen: ['empathie'], sicherheit: 'hoch',
+        erweiterungen: [{ name: 'Die Crew – Bonus-Missionen', bgg_id: 402, jahr: 2021 }, { name: 'Die Crew – Sammelbox' }, 'Fan-Erweiterung XY'] }] }) + '\n```';
       await bp.goto(BASE + '#/games/' + g0.id);
       await bp.click('[data-g="recognize"]');
       await bp.waitForSelector('dialog[open] [data-r-answer]');
@@ -777,6 +783,40 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       assert(g.playersMax === 5 && g.ageMin === 8, 'Fakten von BGG bzw. Schachtel falsch');
       assert(g.category === 'familie' && g.competences.join() === 'empathie', 'Vorhandene Einordnung wurde überschrieben');
       assert(g.mechanics.includes('stichspiel') && g.mechanics.includes('kooperativ'), 'Mechaniken nicht ergänzt');
+    });
+
+    await test('Erweiterungen: aus Antwort und BGG zusammengeführt, besitzen ankreuzen, von Hand ergänzen', async () => {
+      const id = await bp.evaluate(() => window.__leeway.store.list('games').find((x) => x.title === 'Die Crew – Mission Tiefsee').id);
+      let g = (await games()).find((x) => x.id === id);
+      const names = g.expansions.map((x) => x.name);
+      assert(g.expansions.length === 3 && names.includes('Die Crew – Bonus-Missionen') && names.includes('Die Crew – Sammelbox') && names.includes('The Crew: Promo Mission'),
+        'Zusammenführung falsch: ' + JSON.stringify(g.expansions));
+      assert(g.expansions.find((x) => x.bggId === 402).name === 'Die Crew – Bonus-Missionen', 'Deutscher Name sollte Vorrang haben');
+      await bp.goto(BASE + '#/games/' + id);
+      await bp.waitForSelector('.game-expansions .exp-item');
+      assert((await bp.textContent('[data-exp-count]')).includes('0 von 3'), 'Zähler falsch');
+      await bp.click('.game-expansions [data-g="exp-own"]:has-text("Bonus-Missionen")');
+      await bp.waitForFunction(() => document.querySelector('[data-exp-count]')?.textContent.includes('1 von 3'));
+      assert((await bp.getAttribute('.exp-item:first-child [data-g="exp-own"]', 'aria-pressed')) === 'true', 'Vorhandene stehen nicht oben');
+      await bp.fill('#exp-name', 'Eigene Promokarte');
+      await bp.click('.exp-add [type="submit"]');
+      await bp.waitForFunction(() => document.querySelector('[data-exp-count]')?.textContent.includes('2 von 4'));
+      g = (await games()).find((x) => x.id === id);
+      assert(g.expansions.find((x) => x.name === 'Eigene Promokarte')?.source === 'hand', 'Eigene Erweiterung fehlt');
+      await bp.click('.exp-item:has-text("Eigene Promokarte") [data-g="exp-del"]');
+      await bp.waitForFunction(() => document.querySelector('[data-exp-count]')?.textContent.includes('1 von 3'));
+      // Erneuter BGG-Abgleich behält das Häkchen
+      await bp.evaluate((gid) => window.__leeway.store.update('games', gid, { bgg: { status: 'open' } }), id);
+      await bp.click('.game-expansions [data-g="bgg"]');
+      await bp.waitForFunction((gid) => window.__leeway.store.get('games', gid)?.bgg?.status === 'done', id, { timeout: 20000 });
+      g = (await games()).find((x) => x.id === id);
+      assert(g.expansions.length === 3 && g.expansions.find((x) => x.bggId === 402).owned === true, 'Häkchen ging beim Abgleich verloren');
+      await bp.goto(BASE + '#/games');
+      await bp.waitForSelector(`.game-card[data-id="${id}"]`);
+      assert((await bp.textContent(`.game-card[data-id="${id}"]`)).includes('+ 1 Erweiterung'), 'Hinweis an der Karte fehlt');
+      await bp.fill('[data-g="search"]', 'bonus-missionen');
+      assert((await bp.locator('.game-card').count()) === 1, 'Suche findet vorhandene Erweiterung nicht');
+      await bp.fill('[data-g="search"]', '');
     });
 
     await test('BoardGameGeek: unbekannter Titel und abgelehnter Schlüssel zeigen Hinweise', async () => {
