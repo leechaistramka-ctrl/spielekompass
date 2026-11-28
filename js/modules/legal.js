@@ -85,7 +85,7 @@ export const datenschutz = {
         <article class="panel legal-text">
           <h2>Das Wichtigste in Kürze</h2>
           <ul>
-            <li>Alles, was du in dieser Anwendung anlegst (Spiele und ihre Fotos, Einstellungen), wird <strong>nur auf deinem Gerät</strong> gespeichert. Es wird nicht an uns übertragen und nur dann an Dritte, wenn du die optionalen Verbindungen zu BoardGameGeek oder zur Claude API selbst einschaltest (siehe Abschnitt 2).</li>
+            <li>Alles, was du in dieser Anwendung anlegst (Spiele und ihre Fotos, Verleih, Spielprotokoll, Spieleabende, Namen von Personen und Gruppen, Einstellungen), wird <strong>nur auf deinem Gerät</strong> gespeichert. Es wird nicht an uns übertragen und nur dann an Dritte, wenn du die optionalen Verbindungen zu BoardGameGeek oder zur Claude API selbst einschaltest (siehe Abschnitt 2).</li>
             <li>Es gibt <strong>kein Konto, keine Cookies, kein Tracking, keine Statistik</strong> und keine Werbung.</li>
             <li>Schriften und Bilder werden nicht von fremden Servern geladen.</li>
             <li>Beim Aufruf der Anwendung verarbeitet der Webhoster technisch notwendige Verbindungsdaten (siehe Abschnitt 3).</li>
@@ -100,6 +100,9 @@ export const datenschutz = {
           legt sie außerdem die Programmdateien (keine persönlichen Daten) im Zwischenspeicher des Browsers ab (<em>Service Worker</em>).</p>
           <p>Diese Speicherung ist unbedingt erforderlich, damit die von dir ausdrücklich gewünschte Anwendung funktioniert (§ 25 Abs. 2 Nr. 2 TDDDG).
           Wir haben keinen Zugriff auf diese Daten. Du kannst sie jederzeit unter <a href="${href('settings')}">Einstellungen → Alle Daten löschen</a> oder über die Browser-Einstellungen entfernen.</p>
+          <p>Namen, die du für Verleih, Spielprotokoll oder Spieleabende einträgst, sind personenbezogene Daten der jeweiligen Personen. Sie bleiben auf deinem Gerät und in deinen Kartei-Dateien.
+          Für Gruppen mit Kindern und Jugendlichen empfehlen wir Gruppennamen (z. B. „Jugendgruppe Di“) statt einzelner Namen. Einträge löschst du unter <a href="${href('settings')}">Einstellungen → Personen und Gruppen</a>.</p>
+          <p>Der Timer unter „Am Tisch“ hält während des Ablaufs den Bildschirm an und spielt am Ende einen Ton ab, der im Gerät erzeugt wird. Dabei wird nichts übertragen.</p>
           <p>Kartei-Dateien, die du exportierst, speicherst du selbst an einem Ort deiner Wahl (z. B. iCloud Drive). Für diese Ablage gelten die Bedingungen des jeweiligen Anbieters.</p>
 
           <p>Fotos für den Spielekompass nimmst du selbst auf oder wählst sie aus. Die Anwendung speichert sie in der Gerätedatenbank deines Browsers

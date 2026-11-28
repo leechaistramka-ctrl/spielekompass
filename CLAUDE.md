@@ -25,13 +25,14 @@
 
 ## Aufbau
 - `index.html`: App-Gerüst, startet in der Kartei (`#/games`).
-- `js/core/store.js`: Datenspeicher mit austauschbarem Adapter. Einziger Datenbereich: `games`. Speicherplatz `leeway-spielekompass` (nicht ändern, sonst sind vorhandene Daten weg).
+- `js/core/store.js`: Datenspeicher mit austauschbarem Adapter. Datenbereiche: `games`, `people` (Personen und Gruppen), `plays` (Protokoll), `evenings` (Spieleabende). Speicherplatz `leeway-spielekompass` (nicht ändern, sonst sind vorhandene Daten weg).
 - `js/core/image-store.js`: Fotos in IndexedDB (Datenbank `leeway-spielekompass-bilder`).
-- `js/modules/`: `games.js` (Kartei, Filter, Detail, Verbindungen), `settings.js` (Darstellung, Kartei sichern, Speicher, Löschen), `legal.js` (Impressum, Datenschutz).
+- `js/modules/`: `games.js` (Kartei, Filter, Detail, Verbindungen), `settings.js` (Darstellung, Kartei sichern, Speicher, Löschen), `abend.js` (Spieleabend-Planer), `tisch.js` (Am Tisch: Reihenfolge, Punkte, Wertung, Timer), `legal.js` (Impressum, Datenschutz).
 - `js/components/game-data.js`: Begriffe (Spielarten, Mechaniken, Kompetenzen), Filter, Auftrag an Claude und Auswertung der Antwort. Neue Mechaniken oder Kompetenzen hier ergänzen.
 - `js/components/game-ui.js`: Zuschnitt, Bearbeiten, Erkennen-Dialog, „Antwort übernehmen“, Kartei-Export und -Import.
 - `js/components/game-bgg.js`: Abgleich mit BoardGameGeek und Einordnung per Regeln.
 - `js/components/game-ai.js`: optionale vollautomatische Erkennung über die Claude API.
+- `js/components/play-data.js`: reine Logik fürs Spielen (Verleih-Erinnerung, Protokoll-Auswertung, Würfel, Abendplanung). `play-ui.js`: Personen-Auswahl, Verleihen, „Heute gespielt“, Würfel-Dialog.
 - Antwortformat und Abläufe: `docs/SPIELEKOMPASS.md`.
 - Kompatibilität: Antworten mit `spielothek-antwort`, Karteien `leeway-spielothek` und Workspace-Sicherungen (`leeway-workspace`, nur Spiele) werden weiter verstanden.
 - Lokal starten: `node tools/serve.cjs` → http://localhost:8080

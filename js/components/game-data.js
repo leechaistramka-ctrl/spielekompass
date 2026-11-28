@@ -220,7 +220,7 @@ export function filterGames(games, f) {
     if (f.age != null && g.ageMin && g.ageMin > f.age) continue;
     if (f.time != null && g.durationMin && g.durationMin > f.time) continue;
     if (f.categories.length && !f.categories.includes(g.category)) continue;
-    if ((f.labels || []).length && !f.labels.some((l) => (g.labels || []).includes(l))) continue;
+    if ((f.labels || []).length && !f.labels.some((l) => (l === 'verliehen' ? !!g.loan : (g.labels || []).includes(l)))) continue;
     const mech = g.mechanics || [];
     if (f.mechanics.some((m) => !mech.includes(m))) continue;
     const hits = f.competences.filter((c) => (g.competences || []).includes(c)).length;
@@ -244,6 +244,8 @@ export const SORTS = [
   { id: 'dauer', label: 'Spielzeit, kurze zuerst' },
   { id: 'gruppe', label: 'Für große Gruppen zuerst' },
   { id: 'alter', label: 'Für Jüngste zuerst' },
+  { id: 'selten', label: 'Lange nicht gespielt' },
+  { id: 'oft', label: 'Am häufigsten gespielt' },
   { id: 'passung', label: 'Beste Passung zum Filter' },
 ];
 export const DEFAULT_SORT = 'az';
@@ -252,9 +254,13 @@ const byTitle = (a, b) => String(a.title || '').localeCompare(String(b.title || 
 const byNum = (va, vb, dir = 1) => (va == null && vb == null ? 0 : va == null ? 1 : vb == null ? -1 : (va - vb) * dir);
 
 /** Sortiert das Ergebnis von filterGames. „passung“ behält dessen Reihenfolge (Kompetenz-Treffer, ideale Spielerzahl, Zeit). */
-export function sortResults(results, sort = DEFAULT_SORT) {
+export function sortResults(results, sort = DEFAULT_SORT, stats = new Map()) {
   if (sort === 'passung') return results;
+  const last = (g) => stats.get(g.id)?.last || '';
+  const times = (g) => stats.get(g.id)?.count || 0;
   const cmp = {
+    selten: (a, b) => last(a).localeCompare(last(b)) || byTitle(a, b),
+    oft: (a, b) => times(b) - times(a) || byTitle(a, b),
     az: (a, b) => byTitle(a, b),
     neu: (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || byTitle(a, b),
     dauer: (a, b) => byNum(a.durationMin || a.durationMax, b.durationMin || b.durationMax) || byNum(a.durationMax, b.durationMax) || byTitle(a, b),

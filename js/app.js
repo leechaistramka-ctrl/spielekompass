@@ -19,7 +19,8 @@ let current = { mod: null, root: null, key: '' };
 const $ = (sel) => document.querySelector(sel);
 
 const inNav = (m) => !m.hidden;
-const isPrimary = (m) => !m.hidden;
+// Untere Leiste auf dem iPhone: Sammlung und Spielen; Einstellungen liegen unter „Mehr“.
+const isPrimary = (m) => !m.hidden && m.group !== 'system';
 
 function applyTheme() {
   const pref = store.settings.theme;

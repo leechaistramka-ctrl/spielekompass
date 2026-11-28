@@ -20,7 +20,8 @@ async function test(name, fn) {
     results.push(`  ✓ ${name}`);
   } catch (err) {
     failures += 1;
-    results.push(`  ✗ ${name}\n      ${String(err.message).split('\n')[0]}`);
+    const at = (String(err.stack).match(/e2e\.test\.cjs:(\d+)/) || [])[1];
+    results.push(`  ✗ ${name}\n      ${String(err.message).split('\n')[0]}${at ? ` (Zeile ${at})` : ''}`);
   }
 }
 function assert(cond, msg) {
@@ -64,7 +65,7 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
     }
     assert((await page.title()).includes('Spielekompass'), 'Titel falsch: ' + (await page.title()));
     const nav = await page.$$eval('#sidebar-nav a.nav-item', (as) => as.map((a) => a.getAttribute('href')));
-    assert(nav.join() === '#/games,#/settings', 'Navigation falsch: ' + nav.join());
+    assert(nav.join() === '#/games,#/abend,#/tisch,#/settings', 'Navigation falsch: ' + nav.join());
     assert(!(await page.$('#quick-idea')), 'Kein Ideen-Knopf im Spielekompass');
     assert(page.errors.length === 0, 'Konsolenfehler: ' + page.errors.join(' | '));
   });
@@ -96,7 +97,7 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
     await page.setInputFiles('.view-games [data-g="import"]', kt);
     await page.waitForSelector('.game-card[data-id="s1"] .cover.has-image');
     const g = await data(page);
-    assert(Object.keys(g).join() === 'games' && g.games.length === 2, 'Nur Spiele sollen übernommen werden');
+    assert(!g.projects && g.games.length === 2 && !g.plays.length, 'Nur Spiele sollen übernommen werden');
     assert(g.games.find((x) => x.id === 'w1').cover === false, 'Foto ohne Bilddaten sollte entfallen');
     const bad = path.join(dir, 'fremd.json');
     fs.writeFileSync(bad, JSON.stringify({ app: 'etwas-anderes', games: [] }));
@@ -620,6 +621,7 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       assert((await gp.getAttribute('[data-pager="prev"]', 'aria-disabled')) === 'true', 'Vor dem ersten Spiel darf es nicht weitergehen');
       await gp.click('[data-pager="next"]');
       await gp.waitForFunction((id) => location.hash === '#/games/' + id, ids[1]);
+      await gp.waitForSelector('[data-pager-pos]:has-text("2 von")'); // erst wischen, wenn die neue Seite steht
       // Wischen nach rechts = zurück, nach links = weiter
       const swipe = (dx) => gp.evaluate((d) => {
         const el = document.querySelector('.game-detail h1');
@@ -646,6 +648,193 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       assert(gp.errors.length === 0, 'Konsolenfehler: ' + gp.errors.join(' | '));
     });
     await gc.close();
+  }
+
+  // ------------------------------------------------------------------ Spielen: Verleih, Protokoll, Würfel, Abend, Am Tisch
+  {
+    const { ctx: pc, page: pp } = await newPage(browser);
+    const col = (name) => pp.evaluate((n) => window.__leeway.store.state.collections[n], name);
+    await pp.goto(BASE + '#/games');
+    await pp.click('[data-g="sample"]');
+    await pp.waitForSelector('.game-card');
+    const [first] = await col('games');
+
+    await test('Spielen: neue Reiter „Abend“ und „Am Tisch“ in der Seitenleiste', async () => {
+      assert(await pp.isVisible('#sidebar-nav a[href="#/abend"]'), 'Reiter Abend fehlt');
+      assert(await pp.isVisible('#sidebar-nav a[href="#/tisch"]'), 'Reiter Am Tisch fehlt');
+    });
+
+    await test('Verleih: Person neu anlegen, verleihen, Hinweis an der Karte, Erinnerung, „Ist zurück“', async () => {
+      await pp.goto(BASE + '#/games/' + first.id);
+      await pp.click('[data-g="loan"]');
+      await pp.click('dialog[open] [data-person-new]');
+      await pp.fill('dialog[open] #person-name', 'Anna');
+      await pp.press('dialog[open] #person-name', 'Enter');
+      await pp.click('dialog[open] [data-days="14"]');
+      await pp.click('dialog[open] [data-loan-save]');
+      await pp.waitForSelector('.game-loan.is-loaned');
+      let g = (await col('games')).find((x) => x.id === first.id);
+      assert(g.loan?.name === 'Anna' && g.loan.remindDays === 14, 'Verleih nicht gespeichert');
+      await pp.goto(BASE + '#/games');
+      await pp.waitForSelector(`.game-card[data-id="${first.id}"] .badge-loan`);
+      assert((await pp.locator('.loan-bar').count()) === 0, 'Erinnerung zu früh');
+      // 20 Tage zurückdatieren → Erinnerung erscheint, „Später“ verschiebt sie
+      await pp.evaluate(([id]) => { const s = window.__leeway.store; const g = s.get('games', id);
+        return s.update('games', id, { loan: { ...g.loan, since: new Date(Date.now() - 20 * 864e5).toISOString().slice(0, 10) } }); }, [first.id]);
+      await pp.waitForSelector('.loan-bar [data-g="loan-later"]');
+      await pp.click('.loan-bar [data-g="loan-later"]');
+      await pp.waitForSelector('.loan-bar', { state: 'detached' });
+      g = (await col('games')).find((x) => x.id === first.id);
+      assert(g.loan.snoozeUntil, 'Später nicht gemerkt');
+      await pp.goto(BASE + '#/games/' + first.id);
+      await pp.click('.game-loan [data-g="loan-back"]');
+      await pp.waitForSelector('.game-loan:not(.is-loaned)');
+      g = (await col('games')).find((x) => x.id === first.id);
+      assert(!g.loan, 'Verleih nicht beendet');
+    });
+
+    await test('Heute gespielt: ein Tipp trägt ein, Mitspielende wählbar, Zähler an der Karte', async () => {
+      await pp.click('[data-g="played"]');
+      await pp.waitForSelector('dialog[open].sheet-played');
+      await pp.click('dialog[open] [data-person]:has-text("Anna")');
+      await pp.click('dialog[open] [data-close]');
+      const plays = await col('plays');
+      const anna = (await col('people')).find((p) => p.name === 'Anna');
+      assert(plays.length === 1 && plays[0].gameId === first.id && plays[0].people.includes(anna.id), 'Protokoll falsch');
+      await pp.waitForSelector('[data-play-summary]:has-text("1×")');
+      await pp.goto(BASE + '#/games');
+      await pp.waitForSelector(`.game-card[data-id="${first.id}"] .badge-played`);
+    });
+
+    await test('Was spiele ich heute: Zeit und Personen wählen, würfeln, nochmal', async () => {
+      await pp.click('[data-g="tonight"]');
+      await pp.waitForSelector('dialog[open].sheet-tonight');
+      await pp.click('dialog[open] [data-t="time"] >> nth=1');
+      await pp.click('dialog[open] [data-t="roll"]');
+      const titles = (await col('games')).map((g) => g.title);
+      const t1 = (await pp.textContent('dialog[open] [data-t-title]')).trim();
+      assert(titles.includes(t1), 'Würfel zeigt kein Spiel aus der Kartei: ' + t1);
+      await pp.click('dialog[open] [data-t="again"]');
+      const t2 = (await pp.textContent('dialog[open] [data-t-title]')).trim();
+      assert(titles.includes(t2), 'Nochmal liefert kein Spiel');
+      await pp.click('dialog[open] [data-t="open"]');
+      await pp.waitForSelector('.game-detail, .view-games [data-g="loan"]');
+    });
+
+    await test('Spieleabend: Plan füllt das Zeitfenster, Hauptspiel bleibt fest, anderes wählen, ins Protokoll', async () => {
+      const main = (await col('games')).find((g) => (g.durationMax || 0) >= 45 && g.playersMax >= 4) || first;
+      await pp.goto(BASE + '#/abend');
+      await pp.waitForSelector('[data-plan-form]');
+      await pp.selectOption('[data-main]', main.id);
+      await pp.click('[data-plan-form] [type="submit"]');
+      await pp.waitForSelector('.plan-slots .slot');
+      const [ev] = await col('evenings');
+      const total = ev.slots.reduce((s, x) => s + x.minutes, 0);
+      assert(total >= 150 && total <= 210, `Plan nutzt das Fenster nicht: ${total} Min.`);
+      const hi = ev.slots.findIndex((s) => s.kind === 'haupt');
+      assert(ev.slots[hi].gameId === main.id && ev.slots[hi].locked, 'Hauptspiel nicht übernommen');
+      assert(await pp.locator(`[data-a="reroll"][data-i="${hi}"]`).isDisabled(), 'Festes Hauptspiel lässt sich würfeln');
+      const ids = ev.slots.map((s) => s.gameId).filter(Boolean);
+      assert(new Set(ids).size === ids.length, 'Ein Spiel doppelt im Plan');
+      // Ersten Baustein von Hand wählen
+      await pp.click('[data-a="choose"][data-i="0"]');
+      await pp.waitForSelector('dialog[open].sheet-choose');
+      const pick = await pp.getAttribute('dialog[open] [data-pick][aria-pressed="false"] >> nth=0', 'data-pick');
+      await pp.click(`dialog[open] [data-pick="${pick}"]`);
+      await pp.waitForFunction((id) => window.__leeway.store.state.collections.evenings[0].slots[0].gameId === id, pick);
+      await pp.click('[data-a="reroll"]:not([disabled]) >> nth=0');
+      const before = (await col('plays')).length;
+      await pp.click('[data-a="played"]');
+      await pp.waitForFunction((n) => window.__leeway.store.state.collections.plays.length > n, before);
+      const plays = (await col('plays')).filter((p) => p.eveningId === ev.id);
+      assert(plays.length === ids.length, `Erwartet ${ids.length} Einträge, gefunden ${plays.length}`);
+    });
+
+    await test('Am Tisch: Reihenfolge, Punkte je Runde mit Summen, Wertung je Spiel, Ergebnis ins Protokoll', async () => {
+      await pp.goto(BASE + '#/tisch');
+      await pp.waitForSelector('[data-x-form="add"]');
+      for (const n of ['Mia', 'Jonas', 'Leyla']) { await pp.fill('#tisch-name', n); await pp.press('#tisch-name', 'Enter'); }
+      await pp.waitForSelector('[data-turn]:has-text("Mia")');
+      await pp.click('[data-x="next"]');
+      assert((await pp.textContent('[data-turn]')).trim() === 'Jonas', 'Weiter springt nicht');
+      await pp.click('[data-x="down"][data-i="0"]');
+      assert((await pp.textContent('.order-item >> nth=0')).includes('Jonas'), 'Verschieben klappt nicht');
+      await pp.click('[data-x="view"][data-id="punkte"]');
+      await pp.waitForSelector('#score-value');
+      for (const v of ['12', '7', '3', '5', '9', '1']) { await pp.fill('#score-value', v); await pp.press('#score-value', 'Enter'); }
+      const sums = await pp.$$eval('[data-sum]', (els) => els.map((e) => e.textContent.trim()));
+      assert(sums.join(',') === '17,16,4', 'Summen falsch: ' + sums.join(','));
+      assert((await pp.locator('tfoot .is-lead').count()) === 1, 'Führung nicht markiert');
+      await pp.click('[data-x="add"][data-d="5"]');
+      // Wertung je Spiel mit Kategorien, am Spiel gespeichert
+      await pp.selectOption('[data-x-game]', first.id);
+      await pp.click('[data-x="scoring"][data-id="wertung"]');
+      await pp.click('[data-x="cats"]');
+      await pp.fill('dialog[open] #cats-text', 'Straßen\n- Städte\n');
+      await pp.click('dialog[open] [data-c="save"]');
+      await pp.waitForSelector('[data-cat="Städte"]');
+      assert((await col('games')).find((g) => g.id === first.id).scoreCats.join() === 'Straßen,Städte', 'Kategorien nicht gespeichert');
+      await pp.fill('[data-cat="Straßen"]', '8');
+      await pp.fill('[data-cat="Städte"]', '6');
+      assert((await pp.textContent('[data-cat-total]')).trim() === '14', 'Kategoriesumme falsch');
+      await pp.click('[data-x="finish"]');
+      await pp.click('dialog[open] [data-f="log"]');
+      await pp.waitForFunction(() => window.__leeway.store.state.collections.plays.some((p) => p.scores));
+      const play = (await col('plays')).find((p) => p.scores);
+      assert(play.gameId === first.id && play.names.length === 3 && play.winner, 'Partie nicht vollständig eingetragen');
+    });
+
+    await test('Am Tisch: Timer startet, läuft, pausiert; drei Darstellungen', async () => {
+      await pp.click('[data-x="view"][data-id="timer"]');
+      await pp.click('[data-x="preset"][data-s="30"]');
+      assert((await pp.textContent('[data-timer-text]')).trim() === '0:30', 'Vorgabe nicht übernommen');
+      await pp.click('[data-x="toggle"]');
+      await pp.waitForTimeout(1300);
+      await pp.click('[data-x="toggle"]');
+      const t = (await pp.textContent('[data-timer-text]')).trim();
+      assert(t !== '0:30', 'Timer läuft nicht');
+      await pp.waitForTimeout(1100);
+      assert((await pp.textContent('[data-timer-text]')).trim() === t, 'Pause hält nicht an');
+      for (const s of ['ring', 'digits', 'sand']) {
+        await pp.click(`[data-x="style"][data-id="${s}"]`);
+        assert((await pp.locator('[data-timer] svg, [data-timer] [data-bar]').count()) === 1, 'Darstellung fehlt: ' + s);
+      }
+    });
+
+    await test('Kartei-Export enthält Personen, Protokoll und Abende; Sicherung bleibt ohne Schlüssel', async () => {
+      await pp.goto(BASE + '#/games');
+      const [dl] = await Promise.all([pp.waitForEvent('download'), pp.click('[data-g="export"]')]);
+      const file = path.join(os.tmpdir(), 'spielekompass-spielen.json');
+      await dl.saveAs(file);
+      const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+      assert(json.people?.length >= 1 && json.plays?.length >= 2 && json.evenings?.length === 1, 'Export ohne Spielen-Daten');
+      const { ctx: c2, page: p2 } = await newPage(browser);
+      await p2.goto(BASE + '#/games');
+      await p2.setInputFiles('[data-g="import"]', file);
+      await p2.waitForSelector('.game-card');
+      const n = await p2.evaluate(() => window.__leeway.store.state.collections.plays.length);
+      assert(n === json.plays.length, 'Protokoll nicht eingespielt');
+      await c2.close();
+    });
+
+    await test('Spielen: iPhone ohne seitliches Scrollen, Touch-Ziele ab 44 px', async () => {
+      const { ctx: c3, page: p3 } = await newPage(browser, { ...devices['iPhone 13'], locale: 'de-DE' });
+      for (const route of ['#/abend', '#/tisch']) {
+        await p3.goto(BASE + route);
+        await p3.waitForSelector('.view');
+        const over = await p3.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        assert(over <= 0, `${route}: seitliches Scrollen (${over}px)`);
+        const small = await p3.evaluate(() => [...document.querySelectorAll('.view .btn, .view .chip, .view .segmented button')]
+          .map((e) => e.getBoundingClientRect()).filter((r) => r.height > 0 && r.height < 40).length);
+        assert(!small, `${route}: ${small} zu kleine Knöpfe`);
+      }
+      await c3.close();
+    });
+
+    await test('Spielen: keine Konsolenfehler', async () => {
+      assert(pp.errors.length === 0, 'Konsolenfehler: ' + pp.errors.join(' | '));
+    });
+    await pc.close();
   }
 
   // ------------------------------------------------------------------ Spiele: automatisch (Claude API, nachgebildet)

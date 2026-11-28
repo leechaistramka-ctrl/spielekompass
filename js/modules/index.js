@@ -14,16 +14,19 @@
  *   render(root, ctx) – zeichnet das Modul in das Element root
  */
 import games from './games.js';
+import abend from './abend.js';
+import tisch from './tisch.js';
 import settings from './settings.js';
 import { impressum, datenschutz } from './legal.js';
 
 export const NAV_GROUPS = [
-  { id: 'work', label: 'Spiele' },
+  { id: 'work', label: 'Sammlung' },
+  { id: 'play', label: 'Spielen' },
   { id: 'system', label: 'System' },
 ];
 
 export const START_MODULE = 'games';
 
-export const modules = [games, settings, impressum, datenschutz];
+export const modules = [games, abend, tisch, settings, impressum, datenschutz];
 
 export const findModule = (id) => modules.find((m) => m.id === id) || null;

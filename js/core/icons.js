@@ -18,6 +18,7 @@ const PATHS = {
   edit: '<path d="M4 20h4L18.5 9.5a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13 7 4 4"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12.5A1.6 1.6 0 0 0 8.6 21h6.8a1.6 1.6 0 0 0 1.6-1.5L18 7M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/>',
   'chevron-right': '<path d="m9.5 6 6 6-6 6"/>',
+  'chevron-up': '<path d="m6 14.5 6-6 6 6"/>',
   'chevron-left': '<path d="m14.5 6-6 6 6 6"/>',
   'chevron-down': '<path d="m6 9.5 6 6 6-6"/>',
   play: '<rect x="2.5" y="5" width="19" height="14" rx="3.5"/><path d="M10 9v6l5-3z"/>',
