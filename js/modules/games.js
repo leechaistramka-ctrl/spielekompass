@@ -2,16 +2,16 @@
 import { icon } from '../core/icons.js';
 import { esc, plural, daysAgo } from '../core/utils.js';
 import { APP } from '../config.js';
-import { emptyStateHTML, pageHeadHTML, confirmDialog, toast } from '../core/ui.js';
+import { emptyStateHTML, pageHeadHTML, confirmDialog, toast, openDialog } from '../core/ui.js';
 import { href } from '../core/router.js';
 import {
   CATEGORIES, MECHANICS, COMPETENCES, LABELS, TIME_STEPS, labelLabel, videoSearchUrl, mergeExpansions, sortExpansions, categoryLabel, mechanicLabel, competenceLabel,
-  playersText, durationText, ageText, timeLabel, isRecognized, emptyFilter, filterActive, filterCount, filterGames, sampleGames,
+  playersText, durationText, ageText, timeLabel, isRecognized, needsExpansions, EXP_BATCH, emptyFilter, filterActive, filterCount, filterGames, sampleGames,
 } from '../components/game-data.js';
 import {
   coverHTML, hydrateCovers, replaceCover, removeGame, openGameForm, openRecognizeDialog,
   exportKartei, importKartei, chipsList, addGamesAutomatically, enqueueRecognition, resumeRecognition, recropCover,
-  enqueueBgg, applyFromClipboard, canReadClipboard,
+  enqueueBgg, applyFromClipboard, canReadClipboard, openExpansionsBatchDialog,
 } from '../components/game-ui.js';
 import { hasApiKey, getApiKey, setApiKey, MODEL } from '../components/game-ai.js';
 import { hasBggToken, getBggToken, setBggToken } from '../components/game-bgg.js';
@@ -207,6 +207,18 @@ function openBarHTML(games) {
       <div class="dev-bar-actions">
         ${!hasApiKey() && canReadClipboard() ? `<button type="button" class="btn btn-primary" data-g="paste-answer">${icon('upload')}<span>Antwort übernehmen</span></button>` : ''}
         <button type="button" class="btn ${!hasApiKey() && canReadClipboard() ? 'btn-ghost' : 'btn-primary'}" data-g="recognize-open">${icon('sparkle')}<span>${hasApiKey() ? 'Jetzt erkennen' : 'Mit Claude erkennen'}</span></button>
+      </div>
+    </section>`);
+  }
+  const noExp = games.filter((g) => !isBusy(g) && !isBggBusy(g) && needsExpansions(g));
+  if (noExp.length) {
+    parts.push(`<section class="dev-bar exp-bar" aria-label="Spiele ohne Erweiterungen" data-exp-bar>
+      <div class="dev-bar-text">
+        <strong>Bei ${esc(plural(noExp.length, 'Spiel', 'Spielen'))} fehlt noch die Liste der Erweiterungen</strong>
+        <span class="small muted">Ein Text-Auftrag an deine Claude-App für bis zu ${EXP_BATCH} Spiele auf einmal, ohne Fotos und ohne Zusatzkosten. Übernommen werden nur die Erweiterungen.${hasBggToken() ? ' Alternativ holt „Alle Spiele abgleichen“ unter Verbindungen sie von BoardGameGeek.' : ''}</span>
+      </div>
+      <div class="dev-bar-actions">
+        <button type="button" class="btn btn-ghost" data-g="exp-batch">${icon('list')}<span>Erweiterungen ergänzen</span></button>
       </div>
     </section>`);
   }
@@ -424,11 +436,12 @@ function renderList(root, store) {
     if (a === 'paste-answer') {
       try {
         const n = await applyFromClipboard(store);
-        toast(`${plural(n, 'Spiel', 'Spiele')} erkannt und eingetragen`);
+        toast(`Antwort für ${plural(n, 'Spiel', 'Spiele')} übernommen`);
       } catch (err) {
         toast(err.message || 'Das hat nicht geklappt.', 'danger');
       }
     }
+    if (a === 'exp-batch') await openExpansionsBatchDialog(store);
     if (a === 'recognize-open') await recognize(store, store.list('games').filter((g) => !isBusy(g) && !isRecognized(g)));
     if (a === 'bgg-remove') {
       setBggToken('');
@@ -535,18 +548,6 @@ function renderDetail(root, store, id, navigate) {
       try { if (await replaceCover(store, g, file)) toast('Titelbild gespeichert'); } catch (err) { toast(err.message, 'danger'); }
     }
   });
-  root.addEventListener('submit', async (e) => {
-    if (e.target.dataset.gForm !== 'exp-add') return;
-    e.preventDefault();
-    const name = String(new FormData(e.target).get('name') || '').trim();
-    if (!name) return;
-    const cur = store.get('games', g.id);
-    const expansions = mergeExpansions(cur.expansions, [{ name }], 'hand');
-    const added = expansions.find((x) => x.name.toLowerCase() === name.toLowerCase());
-    if (added && (cur.expansions || []).every((x) => x.key !== added.key)) added.owned = true; // neu eingetragen = meist vorhanden
-    await store.update('games', g.id, { expansions });
-    toast('Erweiterung ergänzt');
-  });
   root.addEventListener('click', async (e) => {
     const el = e.target.closest('[data-g]');
     if (!el) return;
@@ -557,19 +558,7 @@ function renderDetail(root, store, id, navigate) {
       else if (res) toast('Gespeichert');
     }
     if (a === 'delete') await del();
-    if (a === 'exp-own' || a === 'exp-del') {
-      const cur = store.get('games', g.id);
-      const key = el.dataset.key;
-      const expansions = (cur.expansions || [])
-        .filter((x) => !(a === 'exp-del' && x.key === key))
-        .map((x) => (a === 'exp-own' && x.key === key ? { ...x, owned: !x.owned } : x));
-      await store.update('games', g.id, { expansions });
-    }
-    if (a === 'exp-all') {
-      expandedAll = g.id;
-      const sec = root.querySelector('.game-expansions');
-      if (sec) sec.outerHTML = expansionsHTML(store.get('games', g.id));
-    }
+    if (a === 'exp-open') openExpansionsDialog(store, g.id);
     if (a === 'label') {
       const cur = store.get('games', g.id);
       const list = [...(cur.labels || [])];
@@ -608,38 +597,86 @@ function bggHintHTML(g) {
   return '';
 }
 
-// Erweiterungen: lange Listen (z. B. Carcassonne) zunächst gekürzt.
-const EXP_SHOWN = 12;
-let expandedAll = null; // ID des Spiels, bei dem alle Erweiterungen gezeigt werden
-
+// Erweiterungen: im Spiel nur eine kurze Zusammenfassung, die ganze Liste im Pop-up.
 function expansionsHTML(g) {
   if (!g.title || g.title === 'Neues Spiel') return '';
   const list = sortExpansions(g.expansions || []);
-  const owned = list.filter((x) => x.owned).length;
-  const all = expandedAll === g.id;
-  const shown = all ? list : list.filter((x, n) => x.owned || n < EXP_SHOWN);
-  const more = list.length - shown.length;
+  const owned = list.filter((x) => x.owned);
+  const shownOwned = owned.slice(0, 6);
+  return `<section class="panel game-expansions" aria-label="Erweiterungen">
+    <div class="panel-head"><h2>Erweiterungen</h2>${list.length ? `<span class="badge ${owned.length ? 'is-hit' : 'badge-open'}" data-exp-count>${owned.length} von ${list.length} vorhanden</span>` : ''}</div>
+    ${owned.length ? `<div class="game-badges exp-owned">${shownOwned.map((x) => `<span class="badge badge-tag">${icon('check')}${esc(x.name)}</span>`).join('')}${owned.length > shownOwned.length ? `<span class="badge badge-tag">+ ${owned.length - shownOwned.length} weitere</span>` : ''}</div>` : ''}
+    ${list.length ? '' : `<p class="muted small">Noch keine Erweiterungen bekannt. ${hasBggToken() ? 'Ein Abgleich mit BoardGameGeek holt die Liste.' : 'Für alle Spiele auf einmal: in der Kartei „Erweiterungen für alle Spiele ergänzen“.'}</p>`}
+    <div class="btn-row"><button type="button" class="btn btn-ghost" data-g="exp-open">${icon('list')}<span>${list.length ? `Alle ${list.length} anzeigen und abhaken` : 'Erweiterung von Hand eintragen'}</span></button></div>
+  </section>`;
+}
+
+/** Pop-up mit der ganzen Liste: abhaken, was vorhanden ist, fehlende ergänzen. Änderungen werden sofort gespeichert. */
+function openExpansionsDialog(store, id) {
+  const g0 = store.get('games', id);
+  const dlg = openDialog({ title: 'Erweiterungen', subtitle: g0.title, className: 'sheet-expansions', bodyHTML: '<div data-exp-body></div>' });
+  const body = dlg.querySelector('[data-exp-body]');
   const item = (x) => `<li class="exp-item">
-      <button type="button" class="check-row" data-g="exp-own" data-key="${esc(x.key)}" aria-pressed="${!!x.owned}">
+      <button type="button" class="check-row" data-x="own" data-key="${esc(x.key)}" aria-pressed="${!!x.owned}">
         <span class="check-box" aria-hidden="true">${x.owned ? icon('check') : ''}</span>
         <span class="exp-name">${esc(x.name)}${x.year ? ` <span class="muted small">(${esc(x.year)})</span>` : ''}</span>
       </button>
-      ${x.source === 'hand' ? `<button type="button" class="btn btn-icon btn-quiet" data-g="exp-del" data-key="${esc(x.key)}" aria-label="${esc(x.name)} entfernen">${icon('x')}</button>` : ''}
+      ${x.source === 'hand' ? `<button type="button" class="btn btn-icon btn-quiet" data-x="del" data-key="${esc(x.key)}" aria-label="${esc(x.name)} entfernen">${icon('x')}</button>` : ''}
     </li>`;
-  return `<section class="panel game-expansions" aria-label="Erweiterungen">
-    <div class="panel-head"><h2>Erweiterungen</h2>${list.length ? `<span class="badge ${owned ? 'is-hit' : 'badge-open'}" data-exp-count>${owned} von ${list.length} vorhanden</span>` : ''}</div>
-    ${list.length ? `<p class="hint small">Antippen, was du besitzt.</p><ul class="exp-list">${shown.map(item).join('')}</ul>
-      ${more ? `<button type="button" class="btn btn-quiet btn-small" data-g="exp-all">Alle ${list.length} zeigen</button>` : ''}`
-      : `<p class="muted small">Noch keine Erweiterungen bekannt. ${hasBggToken() ? 'Ein Abgleich mit BoardGameGeek holt die Liste.' : 'Bei der nächsten Erkennung listet Claude sie mit auf, mit BoardGameGeek-Schlüssel kommen sie automatisch.'}</p>`}
-    <div class="btn-row exp-actions">
-      ${hasBggToken() && !isBggBusy(g) ? `<button type="button" class="btn btn-ghost btn-small" data-g="bgg">${icon('rotate')}<span>Liste von BoardGameGeek aktualisieren</span></button>` : ''}
-    </div>
-    <form class="exp-add" data-g-form="exp-add">
-      <label class="visually-hidden" for="exp-name">Erweiterung von Hand ergänzen</label>
-      <input id="exp-name" name="name" type="text" maxlength="140" placeholder="Fehlt eine? Name eintragen" autocomplete="off">
-      <button type="submit" class="btn btn-ghost">${icon('plus')}<span>Ergänzen</span></button>
-    </form>
-  </section>`;
+  const draw = () => {
+    const g = store.get('games', id);
+    if (!g) { dlg.close(); return; }
+    const list = sortExpansions(g.expansions || []);
+    const owned = list.filter((x) => x.owned).length;
+    body.innerHTML = `
+      ${list.length ? `<p class="exp-summary"><span class="badge ${owned ? 'is-hit' : 'badge-open'}" data-exp-dlg-count>${owned} von ${list.length} vorhanden</span> <span class="hint small">Antippen, was du besitzt.</span></p>
+        <ul class="exp-list">${list.map(item).join('')}</ul>` : '<p class="muted small">Noch keine Erweiterungen bekannt.</p>'}
+      <form class="exp-add" data-x-form="add">
+        <label class="visually-hidden" for="exp-name">Erweiterung von Hand ergänzen</label>
+        <input id="exp-name" name="name" type="text" maxlength="140" placeholder="Fehlt eine? Name eintragen" autocomplete="off">
+        <button type="submit" class="btn btn-ghost">${icon('plus')}<span>Ergänzen</span></button>
+      </form>`;
+  };
+  draw();
+  // Fußleiste außerhalb des Scrollbereichs, damit „Fertig“ immer sichtbar bleibt.
+  dlg.querySelector('.sheet-inner').insertAdjacentHTML('beforeend', `<footer class="sheet-foot">
+      ${hasBggToken() ? `<button type="button" class="btn btn-quiet" data-x="bgg">${icon('rotate')}<span>Von BoardGameGeek aktualisieren</span></button>` : ''}
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-primary" data-close>Fertig</button>
+    </footer>`);
+  const save = (expansions) => store.update('games', id, { expansions });
+  dlg.addEventListener('click', async (e) => {
+    const el = e.target.closest('[data-x]');
+    if (!el) return;
+    const cur = store.get('games', id);
+    if (el.dataset.x === 'own') {
+      await save((cur.expansions || []).map((x) => (x.key === el.dataset.key ? { ...x, owned: !x.owned } : x)));
+      draw();
+      dlg.querySelector(`[data-x="own"][data-key="${CSS.escape(el.dataset.key)}"]`)?.focus();
+    }
+    if (el.dataset.x === 'del') {
+      await save((cur.expansions || []).filter((x) => x.key !== el.dataset.key));
+      draw();
+    }
+    if (el.dataset.x === 'bgg') {
+      if (await enqueueBgg(store, [cur], { force: true })) toast('Wird mit BoardGameGeek abgeglichen – deine Häkchen bleiben');
+      dlg.close();
+    }
+  });
+  dlg.addEventListener('submit', async (e) => {
+    if (e.target.dataset.xForm !== 'add') return;
+    e.preventDefault();
+    const name = String(new FormData(e.target).get('name') || '').trim();
+    if (!name) return;
+    const cur = store.get('games', id);
+    const expansions = mergeExpansions(cur.expansions, [{ name }], 'hand');
+    const added = expansions.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    if (added && (cur.expansions || []).every((x) => x.key !== added.key)) added.owned = true; // neu eingetragen = meist vorhanden
+    await save(expansions);
+    draw();
+    toast('Erweiterung ergänzt');
+    dlg.querySelector('#exp-name')?.focus();
+  });
 }
 
 /** Erklärvideo: vorgeschlagenes Video (aus Claudes Antwort oder von Hand) und immer die YouTube-Suche. */

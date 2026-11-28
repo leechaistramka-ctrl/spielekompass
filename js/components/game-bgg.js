@@ -235,6 +235,7 @@ export function bggPatch(game, d) {
   if (!game.title || game.title === 'Neues Spiel') set('title', d.name);
   patch.mechanics = mechanics;
   if ((d.expansions || []).length) patch.expansions = mergeExpansions(game.expansions, d.expansions, 'bgg');
+  patch.expansionsAt = new Date().toISOString(); // Liste von BoardGameGeek gilt als vollständig
   if (!(game.competences || []).length) patch.competences = deriveCompetences(mechanics, d.categoriesRaw);
   if (!game.category) set('category', deriveCategory({ ...d, ageMin: patch.ageMin }));
   if (game.recognition?.status !== 'done') patch.recognition = { status: 'done', at: new Date().toISOString(), confidence: 'mittel', source: 'bgg' };

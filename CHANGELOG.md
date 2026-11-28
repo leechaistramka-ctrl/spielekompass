@@ -1,5 +1,10 @@
 # Änderungsprotokoll
 
+## 1.3.0 – 28.11.2026
+- **Erweiterungen im Pop-up**: In der Ansicht eines Spiels steht nur noch eine kurze Zusammenfassung („2 von 7 vorhanden“ und die vorhandenen als Schilder). „Alle anzeigen und abhaken“ öffnet die ganze Liste in einem Fenster; Häkchen werden sofort gespeichert, „Fertig“ schließt es
+- **Erweiterungen für alle Spiele ergänzen**: Ein Hinweis in der Kartei zeigt, bei wie vielen Spielen die Liste noch fehlt. Ein einziger Text-Auftrag an die Claude-App (ohne Fotos, ohne Zusatzkosten) für bis zu 30 Spiele; die Antwort mit einem Tipp übernehmen. Übernommen werden nur die Erweiterungen, alle anderen Angaben und Häkchen bleiben unverändert
+- Spiele, bei denen Claude oder BoardGameGeek bereits nachgeschaut haben, gelten als erledigt (auch wenn es keine Erweiterungen gibt)
+
 ## 1.2.0 – 28.11.2026
 - **Erweiterungen je Spiel**: Die veröffentlichten Erweiterungen kommen automatisch, ohne sie einzeln zu scannen
   - Aus Claudes Antwort (deutsche Namen, ohne Zusatzkosten über die Claude-App) und mit BoardGameGeek-Schlüssel aus BoardGameGeek. Doppelte werden über die BGG-Nummer zusammengelegt, Fan-Erweiterungen weggelassen

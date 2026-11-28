@@ -551,6 +551,33 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       await c3.close();
     });
 
+    await test('Spiele: Erweiterungen für alle Spiele mit einem Sammel-Auftrag ergänzen, sonst bleibt alles', async () => {
+      await gp.goto(BASE + '#/games');
+      await gp.waitForSelector('.exp-bar [data-g="exp-batch"]');
+      const missing = await gp.evaluate(() => window.__leeway.store.list('games')
+        .filter((g) => g.recognition?.status === 'done' && g.title && g.title !== 'Neues Spiel' && !g.expansionsAt && !(g.expansions || []).length).map((g) => g.id));
+      assert(missing.length >= 2, 'Zu wenige Spiele für den Test: ' + missing.length);
+      const before = (await games()).find((x) => x.id === missing[0]);
+      await gp.click('[data-g="exp-batch"]');
+      await gp.waitForSelector('dialog[open].sheet-batch');
+      const prompt = await gp.textContent('dialog[open] .recog-prompt pre');
+      assert(missing.every((id) => prompt.includes(id)) && prompt.includes('"auftrag": "erweiterungen"'), 'Auftrag unvollständig');
+      const answer = JSON.stringify({ 'spielekompass-antwort': 1, auftrag: 'erweiterungen', spiele: missing.map((id, n) => (n === 0
+        ? { kennung: id, titel: 'Darf nicht übernommen werden', kategorie: 'experte', erweiterungen: [{ name: 'Testerweiterung A', bgg_id: 9001, jahr: 2020 }, { name: 'Fan-Erweiterung X' }] }
+        : { kennung: id, erweiterungen: [] })) });
+      await gp.fill('dialog[open] [data-r-answer]', 'Bitte sehr:\n```json\n' + answer + '\n```');
+      await gp.click('dialog[open] [data-r="apply"]');
+      await gp.waitForFunction(() => !document.querySelector('dialog[open].sheet-batch'));
+      const after = (await games()).find((x) => x.id === missing[0]);
+      assert(after.title === before.title && after.category === before.category && after.description === before.description, 'Andere Angaben wurden überschrieben');
+      assert(JSON.stringify(after.competences) === JSON.stringify(before.competences) && after.recognition.at === before.recognition.at, 'Einordnung oder Erkennung verändert');
+      assert(after.expansions.length === 1 && after.expansions[0].name === 'Testerweiterung A' && after.expansions[0].source === 'claude', 'Erweiterung falsch: ' + JSON.stringify(after.expansions));
+      const rest = (await games()).filter((x) => missing.slice(1).includes(x.id));
+      assert(rest.every((x) => x.expansionsAt && !(x.expansions || []).length), 'Spiele ohne Erweiterungen nicht als erledigt markiert');
+      await gp.waitForFunction(() => !document.querySelector('.exp-bar'));
+      await gp.evaluate((id) => window.__leeway.store.update('games', id, { expansions: [] }), missing[0]);
+    });
+
     await test('Spiele: keine Konsolenfehler', async () => {
       assert(gp.errors.length === 0, 'Konsolenfehler: ' + gp.errors.join(' | '));
     });
@@ -793,24 +820,34 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
         'Zusammenführung falsch: ' + JSON.stringify(g.expansions));
       assert(g.expansions.find((x) => x.bggId === 402).name === 'Die Crew – Bonus-Missionen', 'Deutscher Name sollte Vorrang haben');
       await bp.goto(BASE + '#/games/' + id);
-      await bp.waitForSelector('.game-expansions .exp-item');
+      // Im Spiel nur eine kurze Zusammenfassung, die Liste steht im Pop-up
+      await bp.waitForSelector('.game-expansions [data-g="exp-open"]');
       assert((await bp.textContent('[data-exp-count]')).includes('0 von 3'), 'Zähler falsch');
-      await bp.click('.game-expansions [data-g="exp-own"]:has-text("Bonus-Missionen")');
-      await bp.waitForFunction(() => document.querySelector('[data-exp-count]')?.textContent.includes('1 von 3'));
-      assert((await bp.getAttribute('.exp-item:first-child [data-g="exp-own"]', 'aria-pressed')) === 'true', 'Vorhandene stehen nicht oben');
-      await bp.fill('#exp-name', 'Eigene Promokarte');
-      await bp.click('.exp-add [type="submit"]');
-      await bp.waitForFunction(() => document.querySelector('[data-exp-count]')?.textContent.includes('2 von 4'));
+      assert(!(await bp.$('.game-expansions .exp-item')), 'Liste sollte nicht im Spiel stehen');
+      await bp.click('[data-g="exp-open"]');
+      await bp.waitForSelector('dialog[open].sheet-expansions .exp-item');
+      await bp.click('dialog[open] [data-x="own"]:has-text("Bonus-Missionen")');
+      await bp.waitForFunction(() => document.querySelector('[data-exp-dlg-count]')?.textContent.includes('1 von 3'));
+      assert((await bp.getAttribute('dialog[open] .exp-item:first-child [data-x="own"]', 'aria-pressed')) === 'true', 'Vorhandene stehen nicht oben');
+      await bp.fill('dialog[open] #exp-name', 'Eigene Promokarte');
+      await bp.click('dialog[open] .exp-add [type="submit"]');
+      await bp.waitForFunction(() => document.querySelector('[data-exp-dlg-count]')?.textContent.includes('2 von 4'));
       g = (await games()).find((x) => x.id === id);
       assert(g.expansions.find((x) => x.name === 'Eigene Promokarte')?.source === 'hand', 'Eigene Erweiterung fehlt');
-      await bp.click('.exp-item:has-text("Eigene Promokarte") [data-g="exp-del"]');
+      await bp.click('dialog[open] .exp-item:has-text("Eigene Promokarte") [data-x="del"]');
+      await bp.waitForFunction(() => document.querySelector('[data-exp-dlg-count]')?.textContent.includes('1 von 3'));
+      await bp.click('dialog[open] .sheet-foot [data-close]');
+      await bp.waitForFunction(() => !document.querySelector('dialog[open]'));
       await bp.waitForFunction(() => document.querySelector('[data-exp-count]')?.textContent.includes('1 von 3'));
+      assert((await bp.textContent('.exp-owned')).includes('Bonus-Missionen'), 'Vorhandene Erweiterung fehlt in der Zusammenfassung');
       // Erneuter BGG-Abgleich behält das Häkchen
       await bp.evaluate((gid) => window.__leeway.store.update('games', gid, { bgg: { status: 'open' } }), id);
-      await bp.click('.game-expansions [data-g="bgg"]');
+      await bp.click('[data-g="exp-open"]');
+      await bp.click('dialog[open] [data-x="bgg"]');
       await bp.waitForFunction((gid) => window.__leeway.store.get('games', gid)?.bgg?.status === 'done', id, { timeout: 20000 });
       g = (await games()).find((x) => x.id === id);
       assert(g.expansions.length === 3 && g.expansions.find((x) => x.bggId === 402).owned === true, 'Häkchen ging beim Abgleich verloren');
+      assert(g.expansionsAt, 'Abgleich sollte die Liste als nachgeschlagen markieren');
       await bp.goto(BASE + '#/games');
       await bp.waitForSelector(`.game-card[data-id="${id}"]`);
       assert((await bp.textContent(`.game-card[data-id="${id}"]`)).includes('+ 1 Erweiterung'), 'Hinweis an der Karte fehlt');
