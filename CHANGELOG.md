@@ -1,5 +1,21 @@
 # Änderungsprotokoll
 
+## 1.5.0 – 28.11.2026
+Neu in der Seitenleiste: **Abend** und **Am Tisch** (auf dem iPhone in der unteren Leiste, Einstellungen unter „Mehr“).
+
+- **Verleihen mit einem Tipp**: In der Ansicht eines Spiels „Verleihen“, Person antippen (oder neu anlegen), Erinnerung nach 2, 4 oder 8 Wochen (oder keine). An der Karte steht „bei Anna“, der Filter „Verliehen“ zeigt alle verliehenen Spiele. Ist die Zeit um, erscheint oben in der Kartei eine Erinnerung mit „Ist zurück“ und „Später“ (eine Woche)
+- **Heute gespielt**: Ein Tipp trägt das Spiel ins Protokoll ein, danach auf Wunsch antippen, wer dabei war (Personen oder Gruppen). An der Karte steht „3× · zuletzt vor 2 Wochen“. Neue Sortierungen: „Lange nicht gespielt“ und „Am häufigsten gespielt“
+- **Was spiele ich heute?** Großer Würfel-Knopf oben in der Kartei: Zeit und Personen wählen (optional Kinder dabei, nur Favoriten, lange nicht gespielt), würfeln, „Nochmal“, „Ansehen“ oder gleich „Heute gespielt“. Verliehene Spiele sind ausgenommen
+- **Spieleabend planen** (Reiter „Abend“): Datum, Zeitfenster, Personen, jüngste Person, Erfahrung und optional eine Gruppe eingeben, auf Wunsch ein Hauptspiel festlegen. Der Plan füllt das Zeitfenster mit Ankommen, Hauptspiel, Pause, weiteren Spielen und Absacker und berücksichtigt, was die Gruppe zuletzt gespielt hat. Je Baustein „Anderes“ (Zufall im Rahmen), „Auswählen“ (passende Vorschläge, zum Hauptspiel passend sortiert) und Festhalten. Danach „So gespielt“ trägt alles ins Protokoll ein
+- **Am Tisch** (Reiter „Am Tisch“):
+  - Reihenfolge: Mitspielende eintragen, verschieben, Startperson auslosen oder mischen, „Weiter“ zeigt, wer dran ist, mit Rundenzähler
+  - Punkte: Block mit Runden und Summen, Führung hervorgehoben, Eingabe per Zahl oder ±1/±5
+  - Wertung je Spiel: Kategorien (z. B. Straßen, Städte) einmal anlegen, werden am Spiel gespeichert; Vorlage per Auftrag an die Claude-App ohne Zusatzkosten
+  - „Spiel beenden“ zeigt das Ergebnis und trägt die Partie mit Siegerin oder Sieger ins Protokoll ein
+  - Timer als Sanduhr, Ring oder große Ziffern; 30 s bis 5 Min. oder eigene Zeit, Ton am Ende, Bildschirm bleibt an
+- Personen und Gruppen lassen sich unter Einstellungen verwalten. „Kartei exportieren“ enthält jetzt auch Personen, Protokoll und Abende
+- Datenschutzerklärung ergänzt (Namen, Protokoll, Timer)
+
 ## 1.4.0 – 28.11.2026
 - **Sortierung wählbar** über den Kacheln: A–Z (Standard), Zuletzt hinzugefügt, Spielzeit (kurze zuerst), Für große Gruppen zuerst, Für Jüngste zuerst, Beste Passung zum Filter. Das Gerät merkt sich die Wahl. Bisher war die Reihenfolge fest: zuerst nach Passung zum Filter, sonst alphabetisch
 - **Blättern in der Detailansicht**: Nach links wischen zeigt das nächste Spiel, nach rechts das vorherige, in der Reihenfolge der Kartei mit den gesetzten Filtern. Oben zusätzlich Pfeile und „3 von 24“

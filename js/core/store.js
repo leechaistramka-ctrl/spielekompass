@@ -14,7 +14,8 @@ import { uid } from './utils.js';
 export const APP_ID = 'leeway-spielekompass';
 
 /** Alle Datenbereiche. Neue Module ergänzen hier ihren Bereich. */
-export const COLLECTIONS = ['games'];
+// games: Spiele · people: Personen und Gruppen · plays: Spielprotokoll · evenings: geplante Spieleabende
+export const COLLECTIONS = ['games', 'people', 'plays', 'evenings'];
 
 export const COLLECTION_LABELS = {
   games: 'Spiele',

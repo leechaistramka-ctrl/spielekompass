@@ -5,7 +5,7 @@
  * WICHTIG: Nach jeder Änderung an App-Dateien die Versionsnummer in CACHE erhöhen,
  * damit Geräte die neue Fassung laden.
  */
-const CACHE = 'leeway-spielekompass-v1.4.0';
+const CACHE = 'leeway-spielekompass-v1.5.0';
 
 const ASSETS = [
   './',
@@ -29,8 +29,12 @@ const ASSETS = [
   './js/components/game-ui.js',
   './js/components/game-ai.js',
   './js/components/game-bgg.js',
+  './js/components/play-data.js',
+  './js/components/play-ui.js',
   './js/modules/index.js',
   './js/modules/games.js',
+  './js/modules/abend.js',
+  './js/modules/tisch.js',
   './js/modules/settings.js',
   './js/modules/legal.js',
   './assets/brand/signet-hellgold.svg',

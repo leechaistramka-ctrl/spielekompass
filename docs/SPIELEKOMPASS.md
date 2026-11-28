@@ -51,6 +51,15 @@ Wichtig: Jede Home-Bildschirm-App hat ihren eigenen Speicher. Spiele zwischen Ge
 - Der Filterbereich lässt sich mit einem Tipp auf die Überschrift ein- und ausklappen; gesetzte Filter wirken weiter.
 - **Alle Filter zurücksetzen** (oben und unten im Filterbereich) setzt alles mit einem Tipp zurück; die Zahl in Klammern zeigt, wie viele Filter gerade gesetzt sind.
 
+## Spielen: Verleih, Protokoll, Abend, Am Tisch
+
+- **Personen und Gruppen** (`people`): `{ name, kind: 'person' | 'group' }`. Werden in den Dialogen mit „+ Neu“ angelegt, unter Einstellungen gelöscht. Für Kinder- und Jugendgruppen Gruppennamen statt Kindernamen.
+- **Verleih** am Spiel: `loan: { personId, name, since, remindDays, snoozeUntil }`. Erinnerung, wenn `remindDays` seit `since` vergangen sind und `snoozeUntil` nicht in der Zukunft liegt. „Später“ setzt `snoozeUntil` eine Woche weiter.
+- **Protokoll** (`plays`): `{ gameId, date, people, names, eveningId?, scores?, winner? }`. „Heute gespielt“, „So gespielt“ (Abend) und „Spiel beenden“ (Am Tisch) schreiben hier hinein.
+- **Was spiele ich heute?**: Zufall unter den Spielen, die zu Zeit, Personen und Optionen passen; verliehene Spiele sind ausgenommen. Die letzte Wahl merkt sich das Gerät (`leeway-spielekompass-heute`).
+- **Spieleabend** (`evenings`): `{ date, from, to, players, youngest, experience, groupId, mainGameId, slots: [{ kind, minutes, gameId, locked }], playedAt }`. Bausteine: ankommen, haupt, zweites, pause, absacker, spiel. Der Plan nutzt das Zeitfenster (unter 75 Minuten ohne Ankommen und Absacker, Pause ab 2 Stunden), meidet Spiele, die die gewählte Gruppe in den letzten Wochen gespielt hat, und wählt zufällig unter den fünf besten Treffern.
+- **Am Tisch**: Stand der Partie nur auf dem Gerät (`leeway-spielekompass-tisch`). Wertungskategorien werden am Spiel gespeichert (`scoreCats`).
+
 ## Datenflüsse
 
 - Fremde Dienste nur mit eigenem Schlüssel und nur, wenn eingeschaltet.
@@ -60,11 +69,11 @@ Wichtig: Jede Home-Bildschirm-App hat ihren eigenen Speicher. Spiele zwischen Ge
 
 ## Speicherung
 
-- Angaben zu den Spielen: Datenbereich `games` im Speicherplatz `leeway-spielekompass` (`localStorage`).
+- Angaben zu den Spielen: Datenbereich `games` im Speicherplatz `leeway-spielekompass` (`localStorage`), dazu `people`, `plays` und `evenings`.
 - Fotos: Gerätedatenbank des Browsers (IndexedDB, Datenbank `leeway-spielekompass-bilder`). Titelbild unter der ID des Spiels, das Originalfoto (für Zuschnitt und Erkennung) unter `<ID>:original`.
 - Schlüssel: `localStorage` unter `leeway-spielekompass-schluessel` (Claude API) und `leeway-spielekompass-bgg` (BoardGameGeek), nie in Sicherungen.
 - Stand des Abgleichs je Spiel: `bgg: { status: 'queued' | 'running' | 'done' | 'notfound' | 'error', error, at }`.
-- „Kartei exportieren“ (in der Kartei und unter Einstellungen) erzeugt eine Datei mit Angaben und Fotos (`{ app: "leeway-spielekompass", format: 1, games, images }`). Beim Einspielen gewinnt die neuere Fassung eines Spiels.
+- „Kartei exportieren“ (in der Kartei und unter Einstellungen) erzeugt eine Datei mit Angaben und Fotos (`{ app: "leeway-spielekompass", format: 1, games, images, people, plays, evenings }`). Beim Einspielen gewinnt die neuere Fassung eines Spiels.
 - Eingespielt werden außerdem Karteien der früheren Spielothek (`app: "leeway-spielothek"`) und Sicherungen des LEEWAY Workspace (`app: "leeway-workspace"`, nur `collections.games`, ohne Fotos).
 
 ## Antwortformat (für Claude)

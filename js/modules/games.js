@@ -1,6 +1,6 @@
 /** Modul: Spiele – Spielesammlung als filterbare Kartei mit Titelbildern. */
 import { icon } from '../core/icons.js';
-import { esc, plural, daysAgo } from '../core/utils.js';
+import { esc, plural, daysAgo, addDaysISO } from '../core/utils.js';
 import { APP } from '../config.js';
 import { emptyStateHTML, pageHeadHTML, confirmDialog, toast, openDialog } from '../core/ui.js';
 import { href } from '../core/router.js';
@@ -15,6 +15,8 @@ import {
 } from '../components/game-ui.js';
 import { hasApiKey, getApiKey, setApiKey, MODEL } from '../components/game-ai.js';
 import { hasBggToken, getBggToken, setBggToken } from '../components/game-bgg.js';
+import { playStats, loanDue, daysSince, agoText, shortDate } from '../components/play-data.js';
+import { openLoanDialog, returnLoan, playedToday, openPlayedDialog, playSummary, openTonightDialog, personName } from '../components/play-ui.js';
 
 const status = (g) => g.recognition?.status || 'open';
 const isBusy = (g) => ['queued', 'running'].includes(status(g));
@@ -42,7 +44,9 @@ const SORT_KEY = 'leeway-spielekompass-sortierung';
 const getSort = () => { try { const v = localStorage.getItem(SORT_KEY); return SORTS.some((x) => x.id === v) ? v : DEFAULT_SORT; } catch { return DEFAULT_SORT; } };
 const setSort = (v) => { try { localStorage.setItem(SORT_KEY, v); } catch { /* nur für diese Sitzung */ } };
 /** Reihenfolge wie in der Kartei (Filter und Sortierung); zum Blättern in der Detailansicht. */
-const orderedGames = (games) => sortResults(filterGames(games, filter), getSort()).map((r) => r.game);
+// Auswertung des Spielprotokolls (für Kacheln und Sortierung), bei jedem Zeichnen neu berechnet.
+let stats = new Map();
+const orderedGames = (games) => sortResults(filterGames(games, filter), getSort(), stats).map((r) => r.game);
 const FOLD_KEY = 'leeway-spielekompass-filter-zu';
 const isFolded = () => { try { return localStorage.getItem(FOLD_KEY) === '1'; } catch { return false; } };
 const setFolded = (v) => { try { if (v) localStorage.setItem(FOLD_KEY, '1'); else localStorage.removeItem(FOLD_KEY); } catch { /* privater Modus */ } };
@@ -95,6 +99,7 @@ function controlsHTML(games) {
       <p class="finder-label">${icon('tag')} Meine Labels</p>
       <div class="chips wrap" role="group" aria-label="Meine Labels">
         ${LABELS.map((l) => chip('labels', l.id, l.label, filter.labels.includes(l.id), games.length ? labs.get(l.id) || 0 : null)).join('')}
+        ${chip('labels', 'verliehen', 'Verliehen', filter.labels.includes('verliehen'), games.length ? games.filter((g) => g.loan).length : null)}
       </div>
     </div>
     <div class="finder-row">
@@ -150,6 +155,8 @@ function cardHTML({ game: g, hits, ideal, tight }) {
         ${g.category ? `<span class="badge cat-${esc(g.category)}">${esc(categoryLabel(g.category))}</span>` : ''}
         ${(g.expansions || []).some((x) => x.owned) ? `<span class="badge badge-tag">+ ${esc(plural((g.expansions || []).filter((x) => x.owned).length, 'Erweiterung', 'Erweiterungen'))}</span>` : ''}
         ${(g.labels || []).map((l) => `<span class="badge badge-label label-${esc(l)}">${l === 'favorit' ? icon('star') : ''}${esc(labelLabel(l))}</span>`).join('')}
+        ${g.loan ? `<span class="badge badge-loan">${icon('send')}bei ${esc(g.loan.name)}</span>` : ''}
+        ${stats.get(g.id) ? `<span class="badge badge-played">${stats.get(g.id).count}× · zuletzt ${esc(shortDate(stats.get(g.id).last))}</span>` : ''}
         ${statusBadge(g)}
         ${filter.competences.length ? `<span class="badge is-hit">${icon('check')}${hits} von ${filter.competences.length} Zielen</span>` : ''}
         ${ideal ? '<span class="badge is-hit">ideale Gruppengröße</span>' : ''}
@@ -168,7 +175,7 @@ function resultsHTML(games) {
     });
   }
   const sort = getSort();
-  const list = sortResults(filterGames(games, filter), sort);
+  const list = sortResults(filterGames(games, filter), sort, stats);
   const head = `<div class="results-head">
     <h2>${filterActive(filter) ? esc(plural(list.length, 'passendes Spiel', 'passende Spiele')) : esc(plural(games.length, 'Spiel', 'Spiele'))}</h2>
     ${filterActive(filter) ? `<button type="button" class="btn btn-quiet btn-small" data-g="reset">${icon('x')}<span>Filter zurücksetzen</span></button>` : ''}
@@ -183,6 +190,19 @@ function resultsHTML(games) {
     });
   }
   return `${head}<div class="game-grid">${list.map(cardHTML).join('')}</div>`;
+}
+
+/** Erinnerungen an verliehene Spiele, deren Frist abgelaufen ist. */
+function loanBarHTML(games) {
+  const due = games.filter((g) => loanDue(g));
+  return due.map((g) => `<section class="dev-bar loan-bar" aria-label="Verliehen" data-loan-bar="${esc(g.id)}">
+      <div class="dev-bar-text"><strong>${esc(g.title)} ist seit ${esc(agoText(daysSince(g.loan.since)).replace(/^vor /, ''))} bei ${esc(g.loan.name)}</strong>
+        <span class="small muted">Verliehen am ${esc(shortDate(g.loan.since))}.</span></div>
+      <div class="dev-bar-actions">
+        <button type="button" class="btn btn-primary" data-g="loan-back" data-id="${esc(g.id)}">${icon('check')}<span>Ist zurück</span></button>
+        <button type="button" class="btn btn-ghost" data-g="loan-later" data-id="${esc(g.id)}">${icon('clock')}<span>In einer Woche erinnern</span></button>
+      </div>
+    </section>`).join('');
 }
 
 function openBarHTML(games) {
@@ -288,13 +308,18 @@ function backupHint(store) {
 
 function renderList(root, store) {
   const games = store.list('games');
+  stats = playStats(store.list('plays'));
   root.innerHTML = `
     ${pageHeadHTML({
       eyebrow: 'Spielekompass', title: 'Deine Spiele',
       intro: 'Deine Spiele als Kartei: fotografieren, von Claude einordnen lassen und für jede Gruppe das passende Spiel finden.',
       actionsHTML: games.length ? `${PHOTO_INPUT('Spiel fotografieren')}<button type="button" class="btn btn-ghost" data-g="new">${icon('plus')}<span>Ohne Foto</span></button>` : '',
     })}
-    <div data-openbar>${openBarHTML(games)}</div>
+    ${games.length ? `<button type="button" class="tonight-hero" data-g="tonight">
+      <span class="tonight-dice">${icon('dice')}</span>
+      <span class="tonight-text"><strong>Was spiele ich heute?</strong><span>Zeit und Personen wählen, würfeln.</span></span>
+    </button>` : ''}
+    <div data-openbar>${loanBarHTML(games)}${openBarHTML(games)}</div>
     ${games.length ? `<section class="panel finder ${isFolded() ? 'is-folded' : ''}" aria-label="Passende Spiele finden">
       <div class="panel-head">
         <button type="button" class="finder-toggle" data-g="fold" aria-expanded="${!isFolded()}" aria-controls="finder-body">
@@ -324,11 +349,12 @@ function renderList(root, store) {
 
   const refresh = () => {
     const all = store.list('games');
+    stats = playStats(store.list('plays'));
     const controls = root.querySelector('[data-controls]');
     if (controls) controls.innerHTML = controlsHTML(all);
     root.querySelectorAll('[data-reset-all]').forEach((el) => { el.innerHTML = resetAllHTML(); });
     root.querySelector('[data-results]').innerHTML = resultsHTML(all);
-    root.querySelector('[data-openbar]').innerHTML = openBarHTML(all);
+    root.querySelector('[data-openbar]').innerHTML = loanBarHTML(all) + openBarHTML(all);
     hydrateCovers(root.querySelector('[data-results]'));
   };
   // Für update(): nur Teile neu zeichnen, damit Suche und Filter beim Erkennen im Hintergrund nicht springen.
@@ -457,6 +483,12 @@ function renderList(root, store) {
       }
     }
     if (a === 'exp-batch') await openExpansionsBatchDialog(store);
+    if (a === 'tonight') openTonightDialog(store);
+    if (a === 'loan-back') { const g = store.get('games', el.dataset.id); if (g) await returnLoan(store, g); }
+    if (a === 'loan-later') {
+      const g = store.get('games', el.dataset.id);
+      if (g?.loan) { await store.update('games', g.id, { loan: { ...g.loan, snoozeUntil: addDaysISO(7) } }); toast('Erinnerung in einer Woche'); }
+    }
     if (a === 'recognize-open') await recognize(store, store.list('games').filter((g) => !isBusy(g) && !isRecognized(g)));
     if (a === 'bgg-remove') {
       setBggToken('');
@@ -482,6 +514,7 @@ function renderList(root, store) {
 // ================================================================= Detail
 function renderDetail(root, store, id, navigate) {
   const g = store.get('games', id);
+  stats = playStats(store.list('plays'));
   if (!g) {
     root.innerHTML = `<a class="back" href="${href('games')}">${icon('chevron-left')}Alle Spiele</a>
       ${emptyStateHTML({ iconName: 'dice', title: 'Spiel nicht gefunden', text: 'Vielleicht wurde es gelöscht.' })}`;
@@ -526,6 +559,7 @@ function renderDetail(root, store, id, navigate) {
           ${fact('flag', 'Alter', ageText(g))}
           ${g.weight ? fact('compass', 'Komplexität', `${String(g.weight).replace('.', ',')} von 5`) : ''}
         </div>
+        ${useHTML(store, g)}
         ${isBusy(g) ? `<section class="panel recog-hint" aria-live="polite">
           <p><span class="spinner" aria-hidden="true"></span><span>${status(g) === 'running' ? 'Claude erkennt das Spiel gerade und sucht auf BoardGameGeek …' : 'Wartet auf die Erkennung.'}</span></p>
         </section>` : !isRecognized(g) || conf === 'niedrig' ? `<section class="panel recog-hint">
@@ -598,6 +632,10 @@ function renderDetail(root, store, id, navigate) {
     const el = e.target.closest('[data-g]');
     if (!el) return;
     const a = el.dataset.g;
+    if (a === 'loan') openLoanDialog(store, store.get('games', g.id));
+    if (a === 'loan-back') await returnLoan(store, store.get('games', g.id));
+    if (a === 'played') await playedToday(store, store.get('games', g.id));
+    if (a === 'play-open') openPlayedDialog(store, el.dataset.id);
     if (a === 'edit') {
       const res = await openGameForm(store, store.get('games', g.id));
       if (res === 'delete') await del();
@@ -723,6 +761,32 @@ function openExpansionsDialog(store, id) {
     toast('Erweiterung ergänzt');
     dlg.querySelector('#exp-name')?.focus();
   });
+}
+
+/** Verleih und Spielprotokoll in der Detailansicht. */
+function useHTML(store, g) {
+  const sum = playSummary(store, g.id);
+  const recent = store.list('plays').filter((p) => p.gameId === g.id).sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 4);
+  const loan = g.loan;
+  return `<div class="game-use">
+    <section class="panel game-loan ${loan ? 'is-loaned' : ''}" aria-label="Verleih">
+      ${loan
+        ? `<p class="loan-line"><span class="badge badge-loan">${icon('send')}Verliehen</span> <strong>an ${esc(loan.name)}</strong></p>
+          <p class="small muted" data-loan-info>seit ${esc(shortDate(loan.since))} · ${esc(agoText(daysSince(loan.since)))}${loan.remindDays ? ` · Erinnerung nach ${Math.round(loan.remindDays / 7)} Wochen` : ''}</p>
+          <div class="btn-row"><button type="button" class="btn btn-primary" data-g="loan-back">${icon('check')}<span>Ist zurück</span></button>
+            <button type="button" class="btn btn-ghost" data-g="loan">${icon('edit')}<span>Ändern</span></button></div>`
+        : `<div class="loan-line"><span class="small muted">In deiner Sammlung</span>
+          <button type="button" class="btn btn-ghost" data-g="loan">${icon('send')}<span>Verleihen</span></button></div>`}
+    </section>
+    <section class="panel game-played" aria-label="Gespielt">
+      <h2>Gespielt</h2>
+      <p class="small" data-play-summary>${esc(sum.text)}</p>
+      <button type="button" class="btn btn-gold btn-big" data-g="played">${icon('dice')}<span>Heute gespielt</span></button>
+      ${recent.length ? `<ul class="play-list">${recent.map((p) => `<li><button type="button" class="play-item" data-g="play-open" data-id="${esc(p.id)}">
+        <span>${esc(shortDate(p.date))}</span><span class="muted">${esc([...(p.people || []).map((id) => personName(store, id)), ...(p.names || [])].filter(Boolean).join(', ') || '–')}</span>
+        ${p.winner ? `<span class="badge badge-tag">${icon('star')}${esc(p.winner)}</span>` : ''}</button></li>`).join('')}</ul>` : ''}
+    </section>
+  </div>`;
 }
 
 /** Erklärvideo: vorgeschlagenes Video (aus Claudes Antwort oder von Hand) und immer die YouTube-Suche. */

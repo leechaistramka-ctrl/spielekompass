@@ -813,7 +813,11 @@ export async function exportKartei(store) {
     const blob = await getImage(g.id).catch(() => null);
     if (blob) images[g.id] = await blobToDataURL(blob);
   }
-  const json = JSON.stringify({ app: KARTEI_APP, format: 1, exportedAt: new Date().toISOString(), games, images });
+  // Personen, Protokoll und Spieleabende reisen mit, damit eine Kartei-Datei die ganze Sammlung sichert.
+  const json = JSON.stringify({
+    app: KARTEI_APP, format: 1, exportedAt: new Date().toISOString(), games, images,
+    people: store.list('people'), plays: store.list('plays'), evenings: store.list('evenings'),
+  });
   downloadBlob(new Blob([json], { type: 'application/json' }), `spielekompass-${todayISO()}.json`);
   await store.setSettings({ lastExportAt: new Date().toISOString() }).catch(() => {});
   return games.length;
@@ -844,6 +848,15 @@ export async function importKartei(store, file) {
   }
   const ids = new Set(take.map((g) => g.id));
   await store.replaceWhere('games', (g) => ids.has(g.id), take);
+  // Personen, Protokoll und Spieleabende (ab Version 1.5): gleiche Einträge werden durch die neuere Fassung ersetzt.
+  for (const col of ['people', 'plays', 'evenings']) {
+    const list = Array.isArray(data[col]) ? data[col].filter((r) => r && typeof r.id === 'string' && r.id) : [];
+    if (!list.length) continue;
+    const have = new Map(store.list(col).map((r) => [r.id, r]));
+    const newer = list.filter((r) => !have.has(r.id) || String(r.updatedAt || '') > String(have.get(r.id).updatedAt || ''));
+    const newIds = new Set(newer.map((r) => r.id));
+    if (newer.length) await store.replaceWhere(col, (r) => newIds.has(r.id), newer);
+  }
   return take.length;
 }
 

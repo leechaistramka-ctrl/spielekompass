@@ -6,6 +6,7 @@ import { pageHeadHTML, confirmDialog, toast } from '../core/ui.js';
 import { href } from '../core/router.js';
 import { clearImages } from '../core/image-store.js';
 import { exportKartei, importKartei } from '../components/game-ui.js';
+import { sortPeople } from '../components/play-data.js';
 
 const THEMES = [
   { id: 'system', label: 'Automatisch' },
@@ -48,6 +49,13 @@ export default {
           </div>
         </section>
 
+        <section class="panel" id="personen">
+          <h2>${icon('users')} Personen und Gruppen</h2>
+          <p class="muted small">Für Verleih, Spielprotokoll und Spieleabende. Neue legst du direkt dort mit „+ Neu“ an. Die Namen bleiben auf diesem Gerät und reisen mit der Kartei-Datei.</p>
+          ${store.count('people') ? `<ul class="people-admin">${sortPeople(store.list('people')).map((p) => `<li><span>${p.kind === 'group' ? icon('users') : ''}${esc(p.name)} <span class="muted small">${p.kind === 'group' ? 'Gruppe' : 'Person'} · ${store.list('plays').filter((x) => (x.people || []).includes(p.id)).length}× gespielt</span></span>
+            <button type="button" class="btn btn-icon btn-quiet" data-s="person-del" data-id="${esc(p.id)}" aria-label="${esc(p.name)} löschen">${icon('trash')}</button></li>`).join('')}</ul>` : '<p class="small muted">Noch keine eingetragen.</p>'}
+        </section>
+
         <section class="panel">
           <h2>Speicher & Installation</h2>
           <ul class="kv">
@@ -76,7 +84,7 @@ export default {
 
         <section class="panel danger-zone">
           <h2>Alle Daten löschen</h2>
-          <p class="muted">Entfernt alle Spiele samt Fotos von diesem Gerät. Exportiere vorher die Kartei.</p>
+          <p class="muted">Entfernt alle Spiele samt Fotos, das Spielprotokoll, Spieleabende sowie Personen und Gruppen von diesem Gerät. Exportiere vorher die Kartei.</p>
           <button type="button" class="btn btn-danger-quiet" data-s="reset">${icon('trash')}<span>Alle Daten löschen …</span></button>
         </section>
       </div>`;
@@ -107,6 +115,13 @@ export default {
       if (!el) return;
       try {
         if (el.dataset.s === 'theme') await store.setSettings({ theme: el.dataset.theme });
+        if (el.dataset.s === 'person-del') {
+          const p = store.get('people', el.dataset.id);
+          if (p && await confirmDialog({ title: `${p.name} löschen?`, message: 'Der Name verschwindet aus der Liste und aus dem Spielprotokoll. Gespielte Partien bleiben gezählt.', confirmLabel: 'Löschen', danger: true })) {
+            await store.remove('people', p.id);
+            toast('Gelöscht');
+          }
+        }
         if (el.dataset.s === 'export') toast(`${plural(await exportKartei(store), 'Spiel', 'Spiele')} exportiert`);
         if (el.dataset.s === 'reset') {
           const ok = await confirmDialog({
