@@ -243,6 +243,7 @@ dialog.sheet::backdrop { background: var(--backdrop); -webkit-backdrop-filter: b
 }
 .toast .icon { color: var(--leeway-sand); width: 18px; height: 18px; }
 .toast-danger .icon { color: #F0A27E; }
+.toast-warning .icon { color: var(--gold); }
 .toast.out { opacity: 0; transform: translateY(8px); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 

@@ -326,7 +326,7 @@ Unbekannte Werte lässt du weg oder setzt null. Erfinde nichts.`;
 export const NEW_TITLE = 'Neues Spiel';
 
 // ---------------------------------------------------------------- Sammel-Auftrag Erweiterungen
-export const EXP_BATCH = 30; // so viele Spiele gehen höchstens in einen Sammel-Auftrag
+export const EXP_BATCH = 15; // so viele Spiele je Sammel-Auftrag (kleiner = Antwort reißt nicht ab)
 
 /** Spiele, für die noch keine Liste der Erweiterungen nachgeschlagen wurde. */
 export const needsExpansions = (g) => isRecognized(g) && !!g.title && g.title !== NEW_TITLE && !g.expansionsAt && !(g.expansions || []).length;
@@ -343,6 +343,7 @@ Regeln:
 - Dazu, wenn bekannt, die Nummer bei BoardGameGeek (bgg_id) und das Jahr.
 - Gibt es keine Erweiterung, eine leere Liste.
 - Jedes Spiel genau einmal, mit seiner Kennung.
+- Schreibe Sonderzeichen wie & direkt, nicht als HTML (&amp;).
 
 Antworte nur mit einem JSON-Codeblock in genau diesem Format, ohne weiteren Text:
 \`\`\`json
@@ -360,7 +361,7 @@ function toInt(v, min, max) {
   if (!Number.isFinite(n)) return undefined;
   return Math.min(max, Math.max(min, n));
 }
-const text = (v, max = 2000) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
+const text = (v, max = 2000) => (typeof v === 'string' && v.trim() ? decodeEntities(v.trim()).slice(0, max) : undefined);
 
 /** Ordnet freie Begriffe den bekannten Kennungen zu (z. B. „Kooperativ“ → kooperativ). */
 function mapVocab(values, list) {
@@ -382,23 +383,64 @@ function mapVocab(values, list) {
 /** Erkennt, ob ein Text (z. B. aus der Zwischenablage) eine Antwort für den Spielekompass ist. */
 export const looksLikeAnswer = (raw) => { const s = String(raw || ''); return s.includes(ANSWER_MARK) || s.includes(ANSWER_MARK_OLD); };
 
-/** Holt den JSON-Teil aus der Antwort (mit oder ohne Codeblock). */
+/** HTML-Zeichen, die beim Kopieren aus Webseiten entstehen können (&amp;, &quot; …), zurückverwandeln. */
+const ENTITIES = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' };
+export const decodeEntities = (s) => String(s).replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+  if (e[0] === '#') { const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10); return Number.isFinite(n) && n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m; }
+  return ENTITIES[e.toLowerCase()] ?? m;
+});
+
+/**
+ * Rettet aus einer abgeschnittenen Antwort alle vollständigen Einträge der Liste „spiele“.
+ * Liest Zeichen für Zeichen und beachtet dabei Text in Anführungszeichen.
+ */
+function salvageItems(json) {
+  const start = json.search(/"spiele"\s*:\s*\[/);
+  if (start < 0) return null;
+  let i = json.indexOf('[', start) + 1;
+  const items = [];
+  let depth = 0, from = -1, inStr = false, esc = false;
+  for (; i < json.length; i++) {
+    const c = json[i];
+    if (inStr) {
+      if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === '{') { if (depth === 0) from = i; depth++; }
+    else if (c === '}') {
+      depth--;
+      if (depth === 0 && from >= 0) { try { items.push(JSON.parse(json.slice(from, i + 1))); } catch { /* beschädigter Eintrag */ } from = -1; }
+    } else if (c === ']' && depth === 0) break;
+  }
+  if (!items.length) return null;
+  const head = json.slice(0, start);
+  const data = { spiele: items, abgeschnitten: true };
+  const auftrag = head.match(/"auftrag"\s*:\s*"([^"]*)"/);
+  if (auftrag) data.auftrag = auftrag[1];
+  return data;
+}
+
+/** Holt den JSON-Teil aus der Antwort (mit oder ohne Codeblock, notfalls aus einer abgeschnittenen Antwort). */
 function extractJSON(raw) {
   const s = String(raw || '');
   const blocks = [...s.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
-  const body = blocks.length ? blocks[blocks.length - 1][1] : s;
+  // Ohne schließende ``` (abgeschnitten): alles nach dem öffnenden Codeblock nehmen.
+  const open = s.search(/```(?:json)?\s*[[{]/i);
+  const body = blocks.length ? blocks[blocks.length - 1][1] : open >= 0 ? s.slice(open).replace(/^```(?:json)?/i, '') : s;
   const first = body.search(/[[{]/);
-  const last = Math.max(body.lastIndexOf('}'), body.lastIndexOf(']'));
-  if (first < 0 || last < first) throw new Error('In der Antwort steht kein JSON. Bitte die ganze Antwort von Claude kopieren.');
-  const json = body.slice(first, last + 1);
-  // Zuerst unverändert lesen: Deutsche Anführungszeichen („…“) im Text sind gültig und dürfen nicht ersetzt werden.
-  try { return JSON.parse(json); } catch { /* weiter mit Rückfall */ }
-  // Rückfall: Die Tastatur hat gerade Anführungszeichen in typografische verwandelt („Intelligente Interpunktion“).
-  try {
-    return JSON.parse(json.replace(/[“”„]/g, '"'));
-  } catch {
-    throw new Error('Die Antwort ist unvollständig oder beschädigt. Bitte die ganze Antwort von Claude erneut kopieren.');
-  }
+  if (first < 0) throw new Error('In der Antwort steht kein JSON. Bitte die ganze Antwort von Claude kopieren.');
+  const lastClose = Math.max(body.lastIndexOf('}'), body.lastIndexOf(']'));
+  const whole = body.slice(first, lastClose >= first ? lastClose + 1 : undefined);
+  const rest = body.slice(first);
+  // Der Reihe nach: unverändert (deutsche Anführungszeichen „…“ im Text sind gültig),
+  // dann mit geraden statt typografischen Anführungszeichen (Tastatur-Autokorrektur),
+  // dann mit zurückverwandelten HTML-Zeichen (&quot; &amp; …).
+  const variants = [(t) => t, (t) => t.replace(/[“”„]/g, '"'), (t) => decodeEntities(t), (t) => decodeEntities(t).replace(/[“”„]/g, '"')];
+  for (const v of variants) { try { return JSON.parse(v(whole)); } catch { /* nächster Versuch */ } }
+  // Abgeschnittene Antwort: die vollständigen Einträge retten.
+  for (const v of variants) { const data = salvageItems(v(rest)); if (data) return data; }
+  throw new Error('Die Antwort ist unvollständig oder beschädigt. Bitte die ganze Antwort von Claude erneut kopieren.');
 }
 
 /** Erweiterungen aus Claudes Antwort lesen (ohne Fan-Erweiterungen). */
@@ -490,6 +532,7 @@ export function parseRecognition(raw, ids, { strict = false } = {}) {
     result.push({ id, patch });
   });
   if (!result.length) throw new Error('Die Antwort passt zu keinem der Spiele. Bitte den Auftrag aus diesem Spielekompass verwenden.');
+  if (data?.abgeschnitten) result.truncated = true;
   return result;
 }
 
