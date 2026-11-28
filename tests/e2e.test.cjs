@@ -594,6 +594,54 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       await gp.evaluate((id) => window.__leeway.store.update('games', id, { expansions: [] }), missing[0]);
     });
 
+    await test('Spiele: Sortierung wählbar und gemerkt; in der Detailansicht blättern und wischen', async () => {
+      await gp.goto(BASE + '#/games');
+      await gp.waitForSelector('[data-g="sort"]');
+      const titles = () => gp.$$eval('.game-card', (els) => els.map((el) => el.dataset.id));
+      const all = await games();
+      const byId = Object.fromEntries(all.map((g) => [g.id, g]));
+      assert((await gp.inputValue('[data-g="sort"]')) === 'az', 'Standard sollte A–Z sein');
+      let ids = await titles();
+      const names = ids.map((id) => byId[id].title);
+      assert(JSON.stringify(names) === JSON.stringify([...names].sort((a, b) => a.localeCompare(b, 'de', { numeric: true, sensitivity: 'base' }))), 'Nicht alphabetisch: ' + names.join(', '));
+      await gp.selectOption('[data-g="sort"]', 'dauer');
+      await gp.waitForFunction(() => document.querySelector('[data-g="sort"]')?.value === 'dauer');
+      ids = await titles();
+      const dur = ids.map((id) => byId[id].durationMin || byId[id].durationMax || 9999);
+      assert(dur.every((d, i) => i === 0 || dur[i - 1] <= d), 'Nicht nach Spielzeit sortiert: ' + dur.join(','));
+      await gp.reload();
+      await gp.waitForSelector('[data-g="sort"]');
+      assert((await gp.inputValue('[data-g="sort"]')) === 'dauer', 'Sortierung nicht gemerkt');
+      ids = await titles(); // nach dem Neuladen sind Filter zurückgesetzt
+      // Detail: Blättern in derselben Reihenfolge
+      await gp.click(`.game-card[data-id="${ids[0]}"]`);
+      await gp.waitForSelector('[data-pager-pos]');
+      assert((await gp.textContent('[data-pager-pos]')).trim() === `1 von ${ids.length}`, 'Position falsch');
+      assert((await gp.getAttribute('[data-pager="prev"]', 'aria-disabled')) === 'true', 'Vor dem ersten Spiel darf es nicht weitergehen');
+      await gp.click('[data-pager="next"]');
+      await gp.waitForFunction((id) => location.hash === '#/games/' + id, ids[1]);
+      // Wischen nach rechts = zurück, nach links = weiter
+      const swipe = (dx) => gp.evaluate((d) => {
+        const el = document.querySelector('.game-detail h1');
+        const mk = (type, x) => {
+          const t = new Touch({ identifier: 1, target: el, clientX: x, clientY: 300 });
+          el.dispatchEvent(new TouchEvent(type, { bubbles: true, touches: type === 'touchend' ? [] : [t], changedTouches: [t] }));
+        };
+        mk('touchstart', 200); mk('touchend', 200 + d);
+      }, dx);
+      await swipe(120);
+      await gp.waitForFunction((id) => location.hash === '#/games/' + id, ids[0]);
+      await gp.waitForSelector('[data-pager-pos]');
+      await swipe(-120);
+      await gp.waitForFunction((id) => location.hash === '#/games/' + id, ids[1]);
+      await gp.waitForSelector('[data-pager-pos]');
+      await swipe(20); // zu kurz: bleibt
+      await gp.waitForTimeout(300);
+      assert((await gp.evaluate(() => location.hash)) === '#/games/' + ids[1], 'Kurzes Wischen hat geblättert');
+      await gp.goto(BASE + '#/games');
+      await gp.selectOption('[data-g="sort"]', 'az');
+    });
+
     await test('Spiele: keine Konsolenfehler', async () => {
       assert(gp.errors.length === 0, 'Konsolenfehler: ' + gp.errors.join(' | '));
     });

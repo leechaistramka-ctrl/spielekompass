@@ -1,5 +1,9 @@
 # Änderungsprotokoll
 
+## 1.4.0 – 28.11.2026
+- **Sortierung wählbar** über den Kacheln: A–Z (Standard), Zuletzt hinzugefügt, Spielzeit (kurze zuerst), Für große Gruppen zuerst, Für Jüngste zuerst, Beste Passung zum Filter. Das Gerät merkt sich die Wahl. Bisher war die Reihenfolge fest: zuerst nach Passung zum Filter, sonst alphabetisch
+- **Blättern in der Detailansicht**: Nach links wischen zeigt das nächste Spiel, nach rechts das vorherige, in der Reihenfolge der Kartei mit den gesetzten Filtern. Oben zusätzlich Pfeile und „3 von 24“
+
 ## 1.3.1 – 28.11.2026
 - **Abgeschnittene Antworten**: Reißt Claudes Antwort mittendrin ab (zu lang oder nicht ganz kopiert), übernimmt der Spielekompass jetzt alle vollständigen Spiele und meldet, wie viele noch offen sind, statt alles abzulehnen
 - HTML-Zeichen wie `&amp;` oder `&quot;`, die beim Kopieren entstehen können, werden erkannt und umgewandelt („Mokka & Bakschisch“)

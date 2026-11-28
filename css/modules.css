@@ -700,3 +700,23 @@ body[data-module="ideas"] .fab { display: none; }
 /* Sammel-Auftrag Erweiterungen */
 .exp-bar { margin-bottom: 20px; }
 .recog-bar + .exp-bar { margin-top: -8px; }
+
+/* Sortierung der Kartei */
+.results-head { flex-wrap: wrap; }
+.sort-pick { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.sort-pick .select-wrap select { min-height: var(--tap); padding-top: 8px; padding-bottom: 8px; width: auto; max-width: 62vw; }
+.results-head .btn-small + .sort-pick { margin-left: 0; }
+
+/* Detailansicht: blättern und wischen */
+.detail-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.detail-top .back { margin-bottom: 0; }
+.game-pager { display: flex; align-items: center; gap: 6px; }
+.game-pager [data-pager-pos] { min-width: 64px; text-align: center; }
+.game-pager [aria-disabled="true"] { opacity: .35; pointer-events: none; }
+.detail-top + .game-detail { margin-top: 12px; }
+.game-detail { touch-action: pan-y; }
+.game-detail.swipe-next { animation: swipe-out-left .14s var(--ease) forwards; }
+.game-detail.swipe-prev { animation: swipe-out-right .14s var(--ease) forwards; }
+@keyframes swipe-out-left { to { opacity: 0; transform: translateX(-36px); } }
+@keyframes swipe-out-right { to { opacity: 0; transform: translateX(36px); } }
+@media (prefers-reduced-motion: reduce) { .game-detail.swipe-next, .game-detail.swipe-prev { animation: none; } }
