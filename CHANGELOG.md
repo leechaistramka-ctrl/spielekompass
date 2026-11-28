@@ -1,5 +1,10 @@
 # Änderungsprotokoll
 
+## 1.3.1 – 28.11.2026
+- **Abgeschnittene Antworten**: Reißt Claudes Antwort mittendrin ab (zu lang oder nicht ganz kopiert), übernimmt der Spielekompass jetzt alle vollständigen Spiele und meldet, wie viele noch offen sind, statt alles abzulehnen
+- HTML-Zeichen wie `&amp;` oder `&quot;`, die beim Kopieren entstehen können, werden erkannt und umgewandelt („Mokka & Bakschisch“)
+- Sammel-Auftrag „Erweiterungen ergänzen“ mit höchstens 15 statt 30 Spielen, damit die Antwort nicht abreißt
+
 ## 1.3.0 – 28.11.2026
 - **Erweiterungen im Pop-up**: In der Ansicht eines Spiels steht nur noch eine kurze Zusammenfassung („2 von 7 vorhanden“ und die vorhandenen als Schilder). „Alle anzeigen und abhaken“ öffnet die ganze Liste in einem Fenster; Häkchen werden sofort gespeichert, „Fertig“ schließt es
 - **Erweiterungen für alle Spiele ergänzen**: Ein Hinweis in der Kartei zeigt, bei wie vielen Spielen die Liste noch fehlt. Ein einziger Text-Auftrag an die Claude-App (ohne Fotos, ohne Zusatzkosten) für bis zu 30 Spiele; die Antwort mit einem Tipp übernehmen. Übernommen werden nur die Erweiterungen, alle anderen Angaben und Häkchen bleiben unverändert

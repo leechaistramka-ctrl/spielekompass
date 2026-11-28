@@ -569,6 +569,7 @@ function downloadBlob(blob, name) {
 /** Wendet eine eingefügte Antwort an. Liefert die Anzahl aktualisierter Spiele. */
 export async function applyRecognition(store, answer, ids, options = {}) {
   const changes = parseRecognition(answer, ids, options);
+  if (options.info) options.info.truncated = !!changes.truncated;
   const done = [];
   for (const { id, patch, onlyExpansions } of changes) {
     if (!store.get('games', id)) continue;
@@ -700,14 +701,14 @@ export async function openRecognizeDialog(store, games) {
             throw new Error('In der Zwischenablage steht keine Antwort für den Spielekompass. In Claude bei der Antwort auf „Kopieren“ tippen.');
           }
           applied = await applyRecognition(store, answer.value, ids);
-          toast(`${plural(applied, 'Spiel', 'Spiele')} erkannt und eingetragen`);
           dlg.close();
+          toast(`${plural(applied, 'Spiel', 'Spiele')} erkannt und eingetragen`);
         }
         if (r === 'apply') {
           if (!answer.value.trim()) throw new Error('Bitte zuerst die Antwort von Claude einfügen.');
           applied = await applyRecognition(store, answer.value, ids);
-          toast(`${plural(applied, 'Spiel', 'Spiele')} erkannt und eingetragen`);
           dlg.close();
+          toast(`${plural(applied, 'Spiel', 'Spiele')} erkannt und eingetragen`);
         }
       } catch (err) {
         toast(err.message || 'Das hat nicht geklappt.', 'danger');
@@ -758,10 +759,12 @@ export function openExpansionsBatchDialog(store) {
   });
   const answer = dlg.querySelector('[data-r-answer]');
   const apply = async () => {
-    const n = await applyRecognition(store, answer.value, ids, { strict: true });
+    const info = {};
+    const n = await applyRecognition(store, answer.value, ids, { strict: true, info });
     const left = store.list('games').filter(needsExpansions).length;
-    toast(`Erweiterungen für ${plural(n, 'Spiel', 'Spiele')} eingetragen${left ? ` – noch ${left} offen` : ''}`);
-    dlg.close();
+    dlg.close(); // zuerst schließen, sonst verschwindet der Hinweis mit dem Dialog
+    if (info.truncated) toast(`Die Antwort war abgeschnitten: ${plural(n, 'Spiel', 'Spiele')} übernommen, ${left} noch offen. Einfach „Erweiterungen ergänzen“ erneut tippen.`, 'warning');
+    else toast(`Erweiterungen für ${plural(n, 'Spiel', 'Spiele')} eingetragen${left ? ` – noch ${left} offen` : ''}`);
     return n;
   };
   return new Promise((resolve) => {

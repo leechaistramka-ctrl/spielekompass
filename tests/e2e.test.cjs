@@ -575,6 +575,22 @@ const data = (page) => page.evaluate(() => window.__leeway.store.state.collectio
       const rest = (await games()).filter((x) => missing.slice(1).includes(x.id));
       assert(rest.every((x) => x.expansionsAt && !(x.expansions || []).length), 'Spiele ohne Erweiterungen nicht als erledigt markiert');
       await gp.waitForFunction(() => !document.querySelector('.exp-bar'));
+      // Abgeschnittene Antwort mit HTML-Zeichen: vollständige Einträge werden übernommen, der Rest bleibt offen
+      await gp.evaluate((ids) => Promise.all(ids.map((id) => window.__leeway.store.update('games', id, { expansionsAt: null, expansions: [] }))), missing);
+      await gp.waitForSelector('.exp-bar [data-g="exp-batch"]');
+      await gp.click('[data-g="exp-batch"]');
+      await gp.waitForSelector('dialog[open].sheet-batch');
+      const cut = '```json\n{"spielekompass-antwort": 1, "auftrag": "erweiterungen", "spiele": [\n'
+        + `{"kennung": "${missing[0]}", "erweiterungen": [{"name": "Istanbul: Mokka &amp; Bakschisch", "jahr": 2015}]},\n{"kennung": "${missing[1].slice(0, 10)}`;
+      await gp.fill('dialog[open] [data-r-answer]', cut);
+      await gp.click('dialog[open] [data-r="apply"]');
+      await gp.waitForSelector('.toast-warning:has-text("abgeschnitten")');
+      const cutGames = await games();
+      const first = cutGames.find((x) => x.id === missing[0]);
+      assert(first.expansions.length === 1 && first.expansions[0].name === 'Istanbul: Mokka & Bakschisch', 'Abgeschnittene Antwort nicht gerettet: ' + JSON.stringify(first.expansions));
+      assert(!cutGames.find((x) => x.id === missing[1]).expansionsAt, 'Abgeschnittenes Spiel darf nicht als erledigt gelten');
+      await gp.waitForSelector('.exp-bar [data-g="exp-batch"]');
+      await gp.evaluate((ids) => Promise.all(ids.map((id) => window.__leeway.store.update('games', id, { expansionsAt: new Date().toISOString() }))), missing);
       await gp.evaluate((id) => window.__leeway.store.update('games', id, { expansions: [] }), missing[0]);
     });
 

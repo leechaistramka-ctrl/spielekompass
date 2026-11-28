@@ -158,10 +158,10 @@ export function toast(message, tone = 'ok') {
   (openDlg || document.body).appendChild(host);
   const el = document.createElement('div');
   el.className = `toast toast-${tone}`;
-  el.innerHTML = `${icon(tone === 'danger' ? 'info' : 'check')}<span>${esc(message)}</span>`;
+  el.innerHTML = `${icon(tone === 'ok' ? 'check' : 'info')}<span>${esc(message)}</span>`;
   host.appendChild(el);
-  setTimeout(() => el.classList.add('out'), tone === 'danger' ? 5200 : 2600);
-  setTimeout(() => el.remove(), tone === 'danger' ? 5600 : 3000);
+  setTimeout(() => el.classList.add('out'), tone === 'ok' ? 2600 : 5200);
+  setTimeout(() => el.remove(), tone === 'ok' ? 3000 : 5600);
 }
 
 /** Leerzustand mit Icon, Titel, Text und optionalen Aktionen. */

@@ -5,7 +5,7 @@
 export const APP = {
   name: 'Spielekompass',
   studio: 'LEEWAY Studio',
-  version: '1.3.0',
+  version: '1.3.1',
   // Version des Datenformats. Wird erhöht, wenn sich die Struktur der Daten ändert.
   schemaVersion: 1,
   // Name des Speicherplatzes im Browser. Nicht ändern – sonst „verschwinden“ vorhandene Daten.

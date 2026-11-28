@@ -44,7 +44,8 @@ Wichtig: Jede Home-Bildschirm-App hat ihren eigenen Speicher. Spiele zwischen Ge
 - **Mechanik**: Alle gewählten müssen zutreffen.
 - Fehlen einem Spiel Angaben, schließt der Filter es nicht aus.
 - **Erweiterungen** (in der Ansicht eines Spiels als Zusammenfassung, ganze Liste im Pop-up): Liste der veröffentlichten Erweiterungen aus Claudes Antwort und BoardGameGeek, ankreuzen, was vorhanden ist. Gespeichert als `expansions: [{ key, name, bggId, year, owned, source }]`.
-- **Sammel-Auftrag Erweiterungen** (Hinweis in der Kartei): Text-Auftrag für bis zu 30 erkannte Spiele ohne Liste (`expansionsAt` fehlt und `expansions` leer). Antwortformat wie unten, aber mit `"auftrag": "erweiterungen"` und je Spiel nur `kennung` und `erweiterungen`. In diesem Modus übernimmt die App nur die Erweiterungen und setzt `expansionsAt`; es folgt kein erneuter BGG-Abgleich.
+- **Sammel-Auftrag Erweiterungen** (Hinweis in der Kartei): Text-Auftrag für bis zu 15 erkannte Spiele ohne Liste (`expansionsAt` fehlt und `expansions` leer). Antwortformat wie unten, aber mit `"auftrag": "erweiterungen"` und je Spiel nur `kennung` und `erweiterungen`. In diesem Modus übernimmt die App nur die Erweiterungen und setzt `expansionsAt`; es folgt kein erneuter BGG-Abgleich.
+- **Robustes Einlesen**: Ist eine Antwort abgeschnitten (fehlendes Ende), übernimmt die App alle vollständigen Einträge der Liste `spiele`; der Rest bleibt offen. HTML-Zeichen (`&amp;`, `&quot;` …), die beim Kopieren entstehen, werden zurückverwandelt.
 - **Meine Labels**: eigene Markierungen (Favorit, Bald wieder spielen, Zur nächsten Runde mitbringen, Noch nie gespielt, Fliegt aus der Sammlung). Eines der gewählten reicht.
 - **Verfügbare Zeit** von 15 Minuten bis 8 Stunden.
 - Der Filterbereich lässt sich mit einem Tipp auf die Überschrift ein- und ausklappen; gesetzte Filter wirken weiter.
