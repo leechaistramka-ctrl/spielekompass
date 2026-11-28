@@ -237,6 +237,33 @@ export function filterGames(games, f) {
     String(a.game.title).localeCompare(String(b.game.title), 'de'));
 }
 
+// ---------------------------------------------------------------- Sortierung
+export const SORTS = [
+  { id: 'az', label: 'A–Z' },
+  { id: 'neu', label: 'Zuletzt hinzugefügt' },
+  { id: 'dauer', label: 'Spielzeit, kurze zuerst' },
+  { id: 'gruppe', label: 'Für große Gruppen zuerst' },
+  { id: 'alter', label: 'Für Jüngste zuerst' },
+  { id: 'passung', label: 'Beste Passung zum Filter' },
+];
+export const DEFAULT_SORT = 'az';
+const byTitle = (a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'de', { numeric: true, sensitivity: 'base' });
+// Unbekannte Werte (leer) stehen immer hinten.
+const byNum = (va, vb, dir = 1) => (va == null && vb == null ? 0 : va == null ? 1 : vb == null ? -1 : (va - vb) * dir);
+
+/** Sortiert das Ergebnis von filterGames. „passung“ behält dessen Reihenfolge (Kompetenz-Treffer, ideale Spielerzahl, Zeit). */
+export function sortResults(results, sort = DEFAULT_SORT) {
+  if (sort === 'passung') return results;
+  const cmp = {
+    az: (a, b) => byTitle(a, b),
+    neu: (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')) || byTitle(a, b),
+    dauer: (a, b) => byNum(a.durationMin || a.durationMax, b.durationMin || b.durationMax) || byNum(a.durationMax, b.durationMax) || byTitle(a, b),
+    gruppe: (a, b) => byNum(a.playersMax, b.playersMax, -1) || byNum(a.playersMin, b.playersMin, -1) || byTitle(a, b),
+    alter: (a, b) => byNum(a.ageMin, b.ageMin) || byTitle(a, b),
+  }[sort] || byTitle;
+  return [...results].sort((x, y) => cmp(x.game, y.game));
+}
+
 // ---------------------------------------------------------------- Auftrag an Claude
 export const ANSWER_MARK = 'spielekompass-antwort';
 // Antworten aus der Zeit im LEEWAY Workspace tragen noch diese Kennzeichnung.

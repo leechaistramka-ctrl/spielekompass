@@ -6,7 +6,7 @@ import { emptyStateHTML, pageHeadHTML, confirmDialog, toast, openDialog } from '
 import { href } from '../core/router.js';
 import {
   CATEGORIES, MECHANICS, COMPETENCES, LABELS, TIME_STEPS, labelLabel, videoSearchUrl, mergeExpansions, sortExpansions, categoryLabel, mechanicLabel, competenceLabel,
-  playersText, durationText, ageText, timeLabel, isRecognized, needsExpansions, EXP_BATCH, emptyFilter, filterActive, filterCount, filterGames, sampleGames,
+  playersText, durationText, ageText, timeLabel, isRecognized, needsExpansions, EXP_BATCH, SORTS, DEFAULT_SORT, sortResults, emptyFilter, filterActive, filterCount, filterGames, sampleGames,
 } from '../components/game-data.js';
 import {
   coverHTML, hydrateCovers, replaceCover, removeGame, openGameForm, openRecognizeDialog,
@@ -38,6 +38,11 @@ let filter = emptyFilter();
 let showAllMechanics = false;
 
 // Filterbereich ein- oder ausgeklappt: merkt sich das Gerät (reine Bequemlichkeit, keine Daten).
+const SORT_KEY = 'leeway-spielekompass-sortierung';
+const getSort = () => { try { const v = localStorage.getItem(SORT_KEY); return SORTS.some((x) => x.id === v) ? v : DEFAULT_SORT; } catch { return DEFAULT_SORT; } };
+const setSort = (v) => { try { localStorage.setItem(SORT_KEY, v); } catch { /* nur für diese Sitzung */ } };
+/** Reihenfolge wie in der Kartei (Filter und Sortierung); zum Blättern in der Detailansicht. */
+const orderedGames = (games) => sortResults(filterGames(games, filter), getSort()).map((r) => r.game);
 const FOLD_KEY = 'leeway-spielekompass-filter-zu';
 const isFolded = () => { try { return localStorage.getItem(FOLD_KEY) === '1'; } catch { return false; } };
 const setFolded = (v) => { try { if (v) localStorage.setItem(FOLD_KEY, '1'); else localStorage.removeItem(FOLD_KEY); } catch { /* privater Modus */ } };
@@ -162,10 +167,14 @@ function resultsHTML(games) {
       actionsHTML: `${PHOTO_INPUT('Spiel fotografieren')}<label class="btn btn-ghost file-btn">${icon('upload')}<span>Kartei einspielen …</span><input type="file" accept="application/json,.json" data-g="import" class="visually-hidden"></label><button type="button" class="btn btn-ghost" data-g="sample">${icon('sparkle')}<span>Beispielspiele laden</span></button>`,
     });
   }
-  const list = filterGames(games, filter);
+  const sort = getSort();
+  const list = sortResults(filterGames(games, filter), sort);
   const head = `<div class="results-head">
     <h2>${filterActive(filter) ? esc(plural(list.length, 'passendes Spiel', 'passende Spiele')) : esc(plural(games.length, 'Spiel', 'Spiele'))}</h2>
     ${filterActive(filter) ? `<button type="button" class="btn btn-quiet btn-small" data-g="reset">${icon('x')}<span>Filter zurücksetzen</span></button>` : ''}
+    <label class="sort-pick"><span class="small muted">Sortieren</span>
+      <span class="select-wrap"><select data-g="sort" aria-label="Spiele sortieren">${SORTS.map((x) => `<option value="${x.id}" ${x.id === sort ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></span>
+    </label>
   </div>`;
   if (!list.length) {
     return head + emptyStateHTML({
@@ -297,7 +306,7 @@ function renderList(root, store) {
       <label class="search">${icon('search')}<input type="search" placeholder="Titel, Thema oder Begriff" value="${esc(filter.query)}" data-g="search" aria-label="Spiele durchsuchen"></label>
       <div data-controls>${controlsHTML(games)}</div>
       <div class="finder-foot" data-reset-all>${resetAllHTML()}</div>
-      <p class="hint small">Mechaniken müssen alle zutreffen. Bei Kompetenzen und Labels reicht eines; Spiele mit mehr Kompetenz-Treffern stehen oben.</p>
+      <p class="hint small">Mechaniken müssen alle zutreffen. Bei Kompetenzen und Labels reicht eines. Mit der Sortierung „Beste Passung zum Filter“ stehen Spiele mit mehr Kompetenz-Treffern oben.</p>
       </div>
     </section>` : ''}
     <div data-results>${resultsHTML(games)}</div>
@@ -353,6 +362,12 @@ function renderList(root, store) {
   });
   root.addEventListener('change', async (e) => {
     const g = e.target.dataset?.g;
+    if (g === 'sort') {
+      setSort(e.target.value);
+      refresh();
+      root.querySelector('[data-g="sort"]')?.focus();
+      return;
+    }
     if (g === 'photos' && e.target.files?.length) {
       const files = [...e.target.files];
       e.target.value = '';
@@ -474,8 +489,19 @@ function renderDetail(root, store, id, navigate) {
   }
   const fact = (ic, label, value) => (value ? `<div class="game-fact">${icon(ic)}<span class="small muted">${esc(label)}</span><strong>${esc(value)}</strong></div>` : '');
   const conf = g.recognition?.confidence;
+  // Blättern in der Reihenfolge der Kartei (Filter und Sortierung). Fällt das Spiel aus dem Filter, alle Spiele.
+  let order = orderedGames(store.list('games')).map((x) => x.id);
+  if (!order.includes(id)) order = sortResults(store.list('games').map((game) => ({ game })), getSort() === 'passung' ? DEFAULT_SORT : getSort()).map((r) => r.game.id);
+  const pos = order.indexOf(id);
+  const prevId = pos > 0 ? order[pos - 1] : null;
+  const nextId = pos >= 0 && pos < order.length - 1 ? order[pos + 1] : null;
+  const pager = order.length > 1 ? `<nav class="game-pager" aria-label="Durch die Spiele blättern">
+      <a class="btn btn-icon btn-ghost" ${prevId ? `href="${href('games/' + prevId)}"` : 'aria-disabled="true"'} data-pager="prev" aria-label="Vorheriges Spiel">${icon('chevron-left')}</a>
+      <span class="small muted" data-pager-pos>${pos + 1} von ${order.length}</span>
+      <a class="btn btn-icon btn-ghost" ${nextId ? `href="${href('games/' + nextId)}"` : 'aria-disabled="true"'} data-pager="next" aria-label="Nächstes Spiel">${icon('chevron-right')}</a>
+    </nav>` : '';
   root.innerHTML = `
-    <a class="back" href="${href('games')}">${icon('chevron-left')}Alle Spiele</a>
+    <div class="detail-top"><a class="back" href="${href('games')}">${icon('chevron-left')}Alle Spiele</a>${pager}</div>
     <div class="game-detail">
       <div class="game-cover-col">
         ${coverHTML(g, 'cover-large')}
@@ -534,6 +560,26 @@ function renderDetail(root, store, id, navigate) {
   hydrateCovers(root);
   resumeRecognition(store);
 
+  // Wischen nach links = nächstes Spiel, nach rechts = vorheriges (wie beim Blättern in Fotos).
+  let touch = null;
+  root.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    touch = e.touches.length === 1 && !e.target.closest('input, textarea, select, dialog, .recog-thumbs, [data-no-swipe]')
+      ? { x: t.clientX, y: t.clientY, at: Date.now() } : null;
+  }, { passive: true });
+  root.addEventListener('touchend', (e) => {
+    if (!touch) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touch.x;
+    const dy = t.clientY - touch.y;
+    const quick = Date.now() - touch.at < 800;
+    touch = null;
+    if (!quick || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const target = dx < 0 ? nextId : prevId;
+    if (!target) return;
+    root.querySelector('.game-detail')?.classList.add(dx < 0 ? 'swipe-next' : 'swipe-prev');
+    setTimeout(() => navigate('games/' + target), 120);
+  }, { passive: true });
   const del = async () => {
     const ok = await confirmDialog({ title: 'Spiel löschen?', message: `„${g.title}“ wird mit Foto aus der Kartei entfernt.`, confirmLabel: 'Löschen', danger: true });
     if (!ok) return;
