@@ -10,7 +10,7 @@ import { esc, plural, todayISO } from '../core/utils.js';
 import { openDialog, fieldHTML, toast } from '../core/ui.js';
 import { putImage, getImage, imageURL, deleteImage, blobToDataURL, dataURLToBlob } from '../core/image-store.js';
 import {
-  CATEGORIES, MECHANICS, COMPETENCES, LABELS, cleanVideoUrl, NEW_TITLE, recognitionPrompt, parseRecognition, looksLikeAnswer,
+  CATEGORIES, MECHANICS, COMPETENCES, LABELS, cleanVideoUrl, resolveExpansions, NEW_TITLE, recognitionPrompt, parseRecognition, looksLikeAnswer,
 } from './game-data.js';
 import { hasApiKey, recognizeGame } from './game-ai.js';
 import { hasBggToken, searchBgg, fetchBggThing, bggPatch } from './game-bgg.js';
@@ -341,7 +341,7 @@ async function recognizeOne(store, id) {
       patch.coverAt = new Date().toISOString();
     } catch { /* Titelbild bleibt wie es ist */ }
   }
-  await store.update('games', id, patch);
+  await store.update('games', id, resolveExpansions(store.get('games', id), patch));
   await enqueueBgg(store, [store.get('games', id)], { force: true });
 }
 
@@ -581,7 +581,7 @@ export async function applyRecognition(store, answer, ids, options = {}) {
         patch.coverAt = new Date().toISOString();
       } catch { /* Titelbild bleibt wie es ist */ }
     }
-    done.push(await store.update('games', id, patch));
+    done.push(await store.update('games', id, resolveExpansions(store.get('games', id), patch)));
   }
   await enqueueBgg(store, done, { force: true });
   return done.length;

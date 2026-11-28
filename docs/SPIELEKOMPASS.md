@@ -43,6 +43,7 @@ Wichtig: Jede Home-Bildschirm-App hat ihren eigenen Speicher. Spiele zwischen Ge
 - **Spielart**: Kinder-, Familien-, Kenner- oder Expertenspiel (mehrere wählbar).
 - **Mechanik**: Alle gewählten müssen zutreffen.
 - Fehlen einem Spiel Angaben, schließt der Filter es nicht aus.
+- **Erweiterungen** (in der Ansicht eines Spiels): Liste der veröffentlichten Erweiterungen aus Claudes Antwort und BoardGameGeek, ankreuzen, was vorhanden ist. Gespeichert als `expansions: [{ key, name, bggId, year, owned, source }]`.
 - **Meine Labels**: eigene Markierungen (Favorit, Bald wieder spielen, Zur nächsten Runde mitbringen, Noch nie gespielt, Fliegt aus der Sammlung). Eines der gewählten reicht.
 - **Verfügbare Zeit** von 15 Minuten bis 8 Stunden.
 - Der Filterbereich lässt sich mit einem Tipp auf die Überschrift ein- und ausklappen; gesetzte Filter wirken weiter.
@@ -74,6 +75,7 @@ Wichtig: Jede Home-Bildschirm-App hat ihren eigenen Speicher. Spiele zwischen Ge
    "bgg_id": 178900, "kategorie": "familie", "mechaniken": ["party"], "kompetenzen": ["kommunikation"],
    "schlagworte": [], "beschreibung": "…", "paedagogik": "…", "sicherheit": "hoch",
    "erklaervideo": "https://www.youtube.com/watch?v=…", "erklaervideo_kanal": "…",
+   "erweiterungen": [{"name": "…", "bgg_id": 123456, "jahr": 2018}],
    "quellen": ["https://…"], "zuschnitt": {"x": 0.1, "y": 0.05, "breite": 0.8, "hoehe": 0.9}}
 ]}
 ```

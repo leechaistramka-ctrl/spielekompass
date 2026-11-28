@@ -9,6 +9,7 @@
  *   Komplexität ab – ganz ohne KI (Rückfall, wenn keine KI-Einordnung vorliegt).
  */
 import { norm } from '../core/utils.js';
+import { mergeExpansions } from './game-data.js';
 
 const BGG = 'https://boardgamegeek.com/xmlapi2';
 const TOKEN_NAME = 'leeway-spielekompass-bgg';
@@ -100,6 +101,11 @@ export async function fetchBggThing(id) {
     publisher: links('boardgamepublisher')[0] || '',
     mechanicsRaw: links('boardgamemechanic'),
     categoriesRaw: links('boardgamecategory'),
+    // Erweiterungen dieses Spiels (inbound="true" wäre umgekehrt das Grundspiel einer Erweiterung)
+    expansions: [...item.querySelectorAll('link[type="boardgameexpansion"]')]
+      .filter((l) => l.getAttribute('inbound') !== 'true')
+      .map((l) => ({ bggId: int(l.getAttribute('id')), name: l.getAttribute('value') || '' }))
+      .filter((x) => x.bggId && x.name && !/fan expansion/i.test(x.name)),
   };
 }
 
@@ -228,6 +234,7 @@ export function bggPatch(game, d) {
   if (!game.publisher) set('publisher', d.publisher);
   if (!game.title || game.title === 'Neues Spiel') set('title', d.name);
   patch.mechanics = mechanics;
+  if ((d.expansions || []).length) patch.expansions = mergeExpansions(game.expansions, d.expansions, 'bgg');
   if (!(game.competences || []).length) patch.competences = deriveCompetences(mechanics, d.categoriesRaw);
   if (!game.category) set('category', deriveCategory({ ...d, ageMin: patch.ageMin }));
   if (game.recognition?.status !== 'done') patch.recognition = { status: 'done', at: new Date().toISOString(), confidence: 'mittel', source: 'bgg' };
