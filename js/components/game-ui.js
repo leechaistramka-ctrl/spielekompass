@@ -10,7 +10,7 @@ import { esc, plural, todayISO } from '../core/utils.js';
 import { openDialog, fieldHTML, toast } from '../core/ui.js';
 import { putImage, getImage, imageURL, deleteImage, blobToDataURL, dataURLToBlob } from '../core/image-store.js';
 import {
-  CATEGORIES, MECHANICS, COMPETENCES, LABELS, cleanVideoUrl, resolveExpansions, NEW_TITLE, recognitionPrompt, parseRecognition, looksLikeAnswer,
+  CATEGORIES, MECHANICS, COMPETENCES, LABELS, cleanVideoUrl, resolveExpansions, NEW_TITLE, recognitionPrompt, expansionsPrompt, needsExpansions, EXP_BATCH, parseRecognition, looksLikeAnswer,
 } from './game-data.js';
 import { hasApiKey, recognizeGame } from './game-ai.js';
 import { hasBggToken, searchBgg, fetchBggThing, bggPatch } from './game-bgg.js';
@@ -570,8 +570,13 @@ function downloadBlob(blob, name) {
 export async function applyRecognition(store, answer, ids, options = {}) {
   const changes = parseRecognition(answer, ids, options);
   const done = [];
-  for (const { id, patch } of changes) {
+  for (const { id, patch, onlyExpansions } of changes) {
     if (!store.get('games', id)) continue;
+    if (onlyExpansions) {
+      // Nur Erweiterungen: kein erneuter Abgleich mit BoardGameGeek, sonst bleibt alles, wie es ist.
+      await store.update('games', id, resolveExpansions(store.get('games', id), patch));
+      continue;
+    }
     // Zuschnitt aus Claudes Antwort auf das gespeicherte Originalfoto anwenden
     const original = patch.cropBox ? await getImage(originalKey(id)).catch(() => null) : null;
     if (original) {
@@ -583,8 +588,8 @@ export async function applyRecognition(store, answer, ids, options = {}) {
     }
     done.push(await store.update('games', id, resolveExpansions(store.get('games', id), patch)));
   }
-  await enqueueBgg(store, done, { force: true });
-  return done.length;
+  if (done.length) await enqueueBgg(store, done, { force: true });
+  return changes.filter(({ id }) => store.get('games', id)).length;
 }
 
 export const canReadClipboard = () => typeof navigator.clipboard?.readText === 'function';
@@ -703,6 +708,85 @@ export async function openRecognizeDialog(store, games) {
           applied = await applyRecognition(store, answer.value, ids);
           toast(`${plural(applied, 'Spiel', 'Spiele')} erkannt und eingetragen`);
           dlg.close();
+        }
+      } catch (err) {
+        toast(err.message || 'Das hat nicht geklappt.', 'danger');
+      }
+    });
+    dlg.addEventListener('close', () => resolve(applied));
+  });
+}
+
+/**
+ * Sammel-Auftrag „Erweiterungen ergänzen“: ein Text-Auftrag für bis zu EXP_BATCH Spiele ohne Liste.
+ * Claudes Antwort trägt nur die Erweiterungen ein und überschreibt sonst nichts.
+ */
+export function openExpansionsBatchDialog(store) {
+  const missing = store.list('games').filter(needsExpansions);
+  const batch = missing.slice(0, EXP_BATCH);
+  if (!batch.length) { toast('Alle Spiele haben schon eine Liste der Erweiterungen.'); return Promise.resolve(0); }
+  const prompt = expansionsPrompt(batch);
+  const ids = batch.map((g) => g.id);
+  const share = typeof navigator.share === 'function';
+  const canPaste = canReadClipboard();
+  const dlg = openDialog({
+    title: 'Erweiterungen ergänzen',
+    subtitle: `${plural(batch.length, 'Spiel', 'Spiele')}${missing.length > batch.length ? ` (die ersten ${EXP_BATCH} von ${missing.length})` : ''}`,
+    className: 'sheet-batch',
+    bodyHTML: `
+      <p class="hint">Ein einziger Text-Auftrag an deine Claude-App, ganz ohne Fotos. Übernommen werden nur die Erweiterungen, alle anderen Angaben und deine Häkchen bleiben, wie sie sind.</p>
+      <ol class="recog-steps">
+        <li>
+          <h3>Auftrag an Claude geben</h3>
+          <div class="btn-row">
+            ${share ? `<button type="button" class="btn btn-primary" data-r="share">${icon('share')}<span>An Claude teilen</span></button>` : ''}
+            <button type="button" class="btn ${share ? 'btn-ghost' : 'btn-primary'}" data-r="copy">${icon('copy')}<span>Auftrag kopieren</span></button>
+          </div>
+        </li>
+        <li>
+          <h3>Antwort von Claude hier einfügen</h3>
+          <div class="field"><label for="exp-batch-answer" class="visually-hidden">Antwort von Claude</label>
+            <textarea id="exp-batch-answer" rows="5" data-r-answer placeholder="Die komplette Antwort mit dem JSON-Block einfügen"></textarea></div>
+          <div class="btn-row">
+            ${canPaste ? `<button type="button" class="btn btn-primary" data-r="paste">${icon('upload')}<span>Aus Zwischenablage übernehmen</span></button>` : ''}
+            <button type="button" class="btn ${canPaste ? 'btn-ghost' : 'btn-primary'}" data-r="apply">${icon('check')}<span>Erweiterungen übernehmen</span></button>
+          </div>
+        </li>
+      </ol>
+      ${missing.length > batch.length ? `<p class="hint small">Danach diesen Knopf noch einmal tippen, dann kommen die nächsten Spiele dran.</p>` : ''}
+      <details class="recog-prompt"><summary>Auftrag ansehen</summary><pre>${esc(prompt)}</pre></details>`,
+  });
+  const answer = dlg.querySelector('[data-r-answer]');
+  const apply = async () => {
+    const n = await applyRecognition(store, answer.value, ids, { strict: true });
+    const left = store.list('games').filter(needsExpansions).length;
+    toast(`Erweiterungen für ${plural(n, 'Spiel', 'Spiele')} eingetragen${left ? ` – noch ${left} offen` : ''}`);
+    dlg.close();
+    return n;
+  };
+  return new Promise((resolve) => {
+    let applied = 0;
+    dlg.addEventListener('click', async (e) => {
+      const el = e.target.closest('[data-r]');
+      if (!el) return;
+      try {
+        if (el.dataset.r === 'share') {
+          try { await navigator.share({ text: prompt, title: 'Erweiterungen ergänzen' }); toast('Geteilt – die Antwort von Claude danach hier übernehmen.'); } catch (err) {
+            if (err.name !== 'AbortError') toast('Teilen nicht möglich – bitte „Auftrag kopieren“ verwenden.', 'danger');
+          }
+        }
+        if (el.dataset.r === 'copy') {
+          if (await copyText(prompt)) toast('Auftrag kopiert – in Claude einfügen');
+          else toast('Kopieren hat nicht geklappt – bitte „Auftrag ansehen“ öffnen und markieren.', 'danger');
+        }
+        if (el.dataset.r === 'paste') {
+          answer.value = await readClipboard();
+          if (!looksLikeAnswer(answer.value)) { answer.focus(); throw new Error('In der Zwischenablage steht keine Antwort für den Spielekompass. In Claude bei der Antwort auf „Kopieren“ tippen.'); }
+          applied = await apply();
+        }
+        if (el.dataset.r === 'apply') {
+          if (!answer.value.trim()) throw new Error('Bitte zuerst die Antwort von Claude einfügen.');
+          applied = await apply();
         }
       } catch (err) {
         toast(err.message || 'Das hat nicht geklappt.', 'danger');

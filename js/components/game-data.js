@@ -325,6 +325,34 @@ Unbekannte Werte lässt du weg oder setzt null. Erfinde nichts.`;
 
 export const NEW_TITLE = 'Neues Spiel';
 
+// ---------------------------------------------------------------- Sammel-Auftrag Erweiterungen
+export const EXP_BATCH = 30; // so viele Spiele gehen höchstens in einen Sammel-Auftrag
+
+/** Spiele, für die noch keine Liste der Erweiterungen nachgeschlagen wurde. */
+export const needsExpansions = (g) => isRecognized(g) && !!g.title && g.title !== NEW_TITLE && !g.expansionsAt && !(g.expansions || []).length;
+
+/** Text-Auftrag nur für die Erweiterungen mehrerer Spiele (ohne Fotos, kostet nichts extra). */
+export function expansionsPrompt(games) {
+  const list = games.map((g) => `- Kennung ${g.id}: „${g.title}“${g.publisher ? `, ${g.publisher}` : ''}${g.year ? `, ${g.year}` : ''}${g.bggId ? `, BoardGameGeek-Nummer ${g.bggId}` : ''}`).join('\n');
+  return `Ich pflege meine Spielesammlung (Gesellschaftsspiele). Bitte nenne mir zu jedem dieser ${games.length === 1 ? 'Spiele' : `${games.length} Spiele`} alle bisher offiziell veröffentlichten Erweiterungen:
+${list}
+
+Regeln:
+- Nur offizielle Erweiterungen, keine Fan-Erweiterungen, keine eigenständigen Nachfolger oder Neuauflagen.
+- Deutscher Name, falls es eine deutsche Ausgabe gibt, sonst der Originalname.
+- Dazu, wenn bekannt, die Nummer bei BoardGameGeek (bgg_id) und das Jahr.
+- Gibt es keine Erweiterung, eine leere Liste.
+- Jedes Spiel genau einmal, mit seiner Kennung.
+
+Antworte nur mit einem JSON-Codeblock in genau diesem Format, ohne weiteren Text:
+\`\`\`json
+{"${ANSWER_MARK}": 1, "auftrag": "erweiterungen", "spiele": [
+  {"kennung": "…", "erweiterungen": [{"name": "…", "bgg_id": 123456, "jahr": 2018}]}
+]}
+\`\`\`
+Unbekannte Werte lässt du weg. Erfinde nichts.`;
+}
+
 const SYN_CATEGORY = { kinderspiel: 'kinder', kind: 'kinder', familienspiel: 'familie', family: 'familie', kennerspiel: 'kenner', experten: 'experte', expertenspiel: 'experte', expert: 'experte' };
 
 function toInt(v, min, max) {
@@ -373,6 +401,13 @@ function extractJSON(raw) {
   }
 }
 
+/** Erweiterungen aus Claudes Antwort lesen (ohne Fan-Erweiterungen). */
+function readExpansions(list) {
+  return list.slice(0, 80).map((e) => (typeof e === 'string' ? { name: text(e, 140) } : e && typeof e === 'object'
+    ? { name: text(e.name, 140), bggId: toInt(e.bgg_id, 1, 99999999), year: toInt(e.jahr, 1900, 2100) } : null))
+    .filter((e) => e && e.name && !/fan[- ]?(expansion|erweiterung)/i.test(e.name));
+}
+
 /**
  * Liest Claudes Antwort und macht daraus Änderungen für die Spiele.
  * ids = Kennungen der Spiele in der Reihenfolge des Auftrags (Rückfall, falls Claude keine Kennung nennt).
@@ -384,6 +419,7 @@ export function parseRecognition(raw, ids, { strict = false } = {}) {
   const data = extractJSON(raw);
   const items = Array.isArray(data) ? data : Array.isArray(data?.spiele) ? data.spiele : data && typeof data === 'object' ? [data] : [];
   if (!items.length) throw new Error('In der Antwort sind keine Spiele enthalten.');
+  const onlyExpansions = data?.auftrag === 'erweiterungen';
   const used = new Set();
   const result = [];
   items.forEach((it, n) => {
@@ -393,6 +429,15 @@ export function parseRecognition(raw, ids, { strict = false } = {}) {
     if (!id && !strict && ids[n] && !used.has(ids[n])) id = ids[n];
     if (!id || used.has(id)) return;
     used.add(id);
+    if (onlyExpansions) {
+      // Sammel-Auftrag: nur die Erweiterungen eintragen, alles andere am Spiel bleibt unverändert.
+      if (!Array.isArray(it.erweiterungen)) return;
+      const found = readExpansions(it.erweiterungen);
+      const patch = { expansionsAt: new Date().toISOString() };
+      if (found.length) patch.expansionsFound = found;
+      result.push({ id, patch, onlyExpansions: true });
+      return;
+    }
     const mech = mapVocab(it.mechaniken, MECHANICS);
     const comp = mapVocab(it.kompetenzen, COMPETENCES);
     const tags = [...new Set([...mech.extra, ...comp.extra, ...(Array.isArray(it.schlagworte) ? it.schlagworte : [])]
@@ -423,10 +468,9 @@ export function parseRecognition(raw, ids, { strict = false } = {}) {
     const urls = (Array.isArray(it.quellen) ? it.quellen : []).filter((u) => typeof u === 'string' && /^https:\/\/[^\s"<>]+$/.test(u)).slice(0, 8);
     if (urls.length) patch.sources = urls;
     if (Array.isArray(it.erweiterungen)) {
-      const found = it.erweiterungen.slice(0, 80).map((e) => (typeof e === 'string' ? { name: e } : e && typeof e === 'object'
-        ? { name: text(e.name, 140), bggId: toInt(e.bgg_id, 1, 99999999), year: toInt(e.jahr, 1900, 2100) } : null))
-        .filter((e) => e && e.name && !/fan[- ]?(expansion|erweiterung)/i.test(e.name));
+      const found = readExpansions(it.erweiterungen);
       if (found.length) patch.expansionsFound = found;
+      patch.expansionsAt = new Date().toISOString();
     }
     const video = cleanVideoUrl(it.erklaervideo);
     if (video) { patch.videoUrl = video; patch.videoChannel = text(it.erklaervideo_kanal, 60) || ''; }

@@ -690,3 +690,13 @@ body[data-module="ideas"] .fab { display: none; }
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: inherit;
 }
 .exp-add input:focus { outline: none; border-color: var(--gold); }
+
+/* Erweiterungen: Zusammenfassung im Spiel, ganze Liste im Pop-up */
+.exp-owned { margin: 8px 0 4px; }
+.exp-owned .badge .icon { width: 14px; height: 14px; }
+.exp-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 6px; }
+.sheet-expansions .exp-list { margin-top: 4px; }
+
+/* Sammel-Auftrag Erweiterungen */
+.exp-bar { margin-bottom: 20px; }
+.recog-bar + .exp-bar { margin-top: -8px; }
